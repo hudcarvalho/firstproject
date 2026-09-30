@@ -149,8 +149,26 @@ sistema com os dados guardados no próprio servidor. Limitações: o site precis
 **Manutenção**
 - Todo mês: aba *Web* → botão para estender o prazo do site.
 - Backup: aba *Files* → baixe `firstproject/instance/controle.db`.
-- Atualizar o sistema: no console Bash, `cd firstproject && git pull && bash deploy/pythonanywhere_setup.sh`,
-  depois **Reload** na aba *Web*.
+- Atualizações: automáticas (veja abaixo). Se precisar publicar pelo console:
+  `cd ~/firstproject && git fetch && git reset --hard origin/main && bash deploy/pythonanywhere_setup.sh`,
+  depois **Reload** na aba *Web* (os dados em `instance/` não são afetados).
+
+**Publicação automática (GitHub Actions)**
+
+A cada atualização da `main`, o workflow `.github/workflows/deploy.yml` roda os testes e, se
+passarem, envia os arquivos alterados ao PythonAnywhere pela API, recarrega o site e confere se
+ele voltou ao ar (`/saude`). As migrações do banco rodam sozinhas ao recarregar.
+
+Configuração (uma vez):
+1. No PythonAnywhere: *Account → API token → Create a new API token* e copie o token.
+2. No GitHub: *Settings → Secrets and variables → Actions → New repository secret*:
+   - `PA_USERNAME` = seu usuário do PythonAnywhere
+   - `PA_API_TOKEN` = o token copiado
+3. (Conta na região europeia: crie também a *variable* `PA_HOST` = `eu.pythonanywhere.com`.)
+
+Para publicar manualmente: aba *Actions → Testes e publicação → Run workflow*.
+Se uma atualização mudar o `requirements.txt`, a publicação automática para e pede o comando
+de console acima (uma vez), porque as novas dependências precisam ser instaladas no servidor.
 
 ### Pago: Render
 
