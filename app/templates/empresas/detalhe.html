@@ -2,22 +2,7 @@
 {% from "_macros.html" import badge_atraso, badge_status %}
 {% block title %}{{ empresa.nome_exibicao }}{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-start mb-3">
-  <div>
-    <h1 class="h3 mb-1">{{ empresa.razao_social }} {% if not empresa.ativo %}<span class="badge text-bg-secondary align-middle">Inativa</span>{% endif %}</h1>
-    <div class="text-muted">{% if empresa.codigo %}Cód. {{ empresa.codigo }} · {% endif %}{{ empresa.cnpj_formatado }}{% if empresa.nome_fantasia %} · {{ empresa.nome_fantasia }}{% endif %}</div>
-  </div>
-  <div class="d-flex gap-2">
-    <a class="btn btn-outline-secondary" href="{{ url_for('distribuicao.empresa', id=empresa.id) }}">Distribuição de lucros</a>
-    <a class="btn btn-outline-primary" href="{{ url_for('main.empresa_editar', id=empresa.id) }}">Editar cadastro</a>
-  </div>
-</div>
-
-<ul class="nav nav-tabs mb-3">
-  {% for m in modulos %}
-  <li class="nav-item"><a class="nav-link {{ 'active' if m.id == modulo.id }}" href="{{ url_for('main.empresa_modulo', id=empresa.id, modulo=m.codigo) }}">{{ m.nome }}</a></li>
-  {% endfor %}
-</ul>
+{% with aba = 'modulo:' ~ modulo.codigo %}{% include "empresas/_cabecalho.html" %}{% endwith %}
 
 <div class="row g-3 mb-4">
   <div class="col-md-3"><div class="card h-100"><div class="card-body">

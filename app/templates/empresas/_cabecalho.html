@@ -1,0 +1,16 @@
+{# Cabeçalho da empresa com as abas: um por módulo ativo + Distribuição de Lucros.
+   Espera: empresa e aba ("modulo:<codigo>" ou "distribuicao"). #}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">{{ empresa.razao_social }} {% if not empresa.ativo %}<span class="badge text-bg-secondary align-middle">Inativa</span>{% endif %}</h1>
+    <div class="text-muted">{% if empresa.codigo %}Cód. {{ empresa.codigo }} · {% endif %}{{ empresa.cnpj_formatado }}{% if empresa.nome_fantasia %} · {{ empresa.nome_fantasia }}{% endif %}</div>
+  </div>
+  <a class="btn btn-outline-primary" href="{{ url_for('main.empresa_editar', id=empresa.id) }}">Editar cadastro</a>
+</div>
+
+<ul class="nav nav-tabs mb-3">
+  {% for m in modulos_ativos %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if aba == 'modulo:' ~ m.codigo }}" href="{{ url_for('main.empresa_modulo', id=empresa.id, modulo=m.codigo) }}">{{ m.nome }}</a></li>
+  {% endfor %}
+  <li class="nav-item"><a class="nav-link {{ 'active' if aba == 'distribuicao' }}" href="{{ url_for('distribuicao.empresa', id=empresa.id) }}">Distribuição de Lucros</a></li>
+</ul>

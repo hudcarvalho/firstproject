@@ -119,7 +119,7 @@ def empresa(id):
     linhas, totais_mes, total_geral = _grade(empresa, ano)
     return render_template(
         "distribuicao/empresa.html", empresa=empresa, ano=ano, meses=MESES, linhas=linhas,
-        totais_mes=totais_mes, total_geral=total_geral, clientes=_clientes_para_busca(),
+        totais_mes=totais_mes, total_geral=total_geral,
         soma_quotas=_soma_quotas(empresa),
         valores_digitados=request.form if request.method == "POST" else None,
     )
