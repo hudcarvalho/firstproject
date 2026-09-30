@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_ativo %}
+{% block title %}Responsáveis{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Responsáveis</h1>
+  <a class="btn btn-primary" href="{{ url_for('main.responsavel_form') }}">+ Novo responsável</a>
+</div>
+<div class="card"><table class="table table-hover align-middle mb-0">
+  <thead class="table-light"><tr><th>Nome</th><th>E-mail</th><th>Empresas</th><th>Situação</th><th></th></tr></thead>
+  <tbody>
+  {% for r in responsaveis %}
+    <tr><td>{{ r.nome }}</td><td>{{ r.email or '—' }}</td>
+      <td><a href="{{ url_for('main.painel', responsavel=r.id) }}">{{ r.empresas | selectattr('ativo') | list | length }}</a></td>
+      <td>{{ badge_ativo(r.ativo) }}</td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.responsavel_form', id=r.id) }}">Editar</a></td></tr>
+  {% else %}
+    <tr><td colspan="5" class="text-center text-muted py-4">Nenhum responsável cadastrado.</td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

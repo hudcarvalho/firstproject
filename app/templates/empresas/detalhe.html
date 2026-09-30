@@ -1,0 +1,150 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_atraso, badge_status %}
+{% block title %}{{ empresa.nome_exibicao }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start mb-3">
+  <div>
+    <h1 class="h3 mb-1">{{ empresa.razao_social }} {% if not empresa.ativo %}<span class="badge text-bg-secondary align-middle">Inativa</span>{% endif %}</h1>
+    <div class="text-muted">{{ empresa.cnpj_formatado }}{% if empresa.nome_fantasia %} · {{ empresa.nome_fantasia }}{% endif %}</div>
+  </div>
+  <a class="btn btn-outline-primary" href="{{ url_for('main.empresa_editar', id=empresa.id) }}">Editar cadastro</a>
+</div>
+
+<div class="row g-3 mb-4">
+  <div class="col-md-3"><div class="card h-100"><div class="card-body">
+    <div class="small text-muted">Tributação</div><div class="fs-5 fw-semibold">{{ empresa.regime.nome }}</div>
+  </div></div></div>
+  <div class="col-md-3"><div class="card h-100"><div class="card-body">
+    <div class="small text-muted">Responsável</div><div class="fs-5 fw-semibold">{{ empresa.responsavel.nome if empresa.responsavel else '—' }}</div>
+  </div></div></div>
+  <div class="col-md-6"><div class="card h-100"><div class="card-body">
+    <div class="small text-muted">Escriturada até</div>
+    <div class="d-flex flex-wrap align-items-center gap-3">
+      <div class="fs-5 fw-semibold">{{ empresa.escriturada_ate | competencia }} {{ badge_atraso(atraso) }}</div>
+      <form method="post" action="{{ url_for('main.empresa_escrituracao', id=empresa.id) }}" class="d-flex gap-2 ms-auto">
+        <input type="month" class="form-control form-control-sm" name="escriturada_ate" value="{{ empresa.escriturada_ate | input_competencia }}" required>
+        <button class="btn btn-sm btn-primary text-nowrap">Atualizar</button>
+      </form>
+    </div>
+  </div></div></div>
+</div>
+
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Obrigações da empresa</strong>
+    <span class="small text-muted">Situação em {{ hoje | data_br }}</span>
+  </div>
+  <div class="table-responsive">
+  <table class="table align-middle mb-0">
+    <thead class="table-light"><tr><th>Obrigação</th><th>Periodicidade</th><th>Esfera</th><th>Venc.</th><th>Última competência cumprida</th><th>Competência esperada</th><th>Situação</th></tr></thead>
+    <tbody>
+    {% for s in situacao %}{% set o = s.obrigacao %}
+      <tr>
+        <td>{{ o.nome }}{% if s.origem != 'regime' %} <span class="badge text-bg-info">específica</span>{% endif %}
+          {% if o.descricao %}<div class="small text-muted">{{ o.descricao }}</div>{% endif %}</td>
+        <td>{{ o.periodicidade_label }}</td>
+        <td>{{ o.esfera_label }}</td>
+        <td class="text-nowrap">{{ 'dia ' ~ o.dia_vencimento if o.dia_vencimento else '—' }}</td>
+        <td>{% if s.ultima %}{{ s.ultima.competencia | competencia }} <span class="small text-muted">(em {{ s.ultima.data_entrega | data_br }})</span>{% else %}—{% endif %}</td>
+        <td>{{ s.esperada | competencia }}</td>
+        <td>{{ badge_status(s.status) }}</td>
+      </tr>
+    {% else %}
+      <tr><td colspan="7" class="text-center text-muted py-3">Nenhuma obrigação parametrizada para esta tributação. <a href="{{ url_for('main.regimes_matriz') }}">Parametrizar</a></td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<div class="row g-4">
+  <div class="col-lg-7">
+    <div class="card mb-4">
+      <div class="card-header"><strong>Registrar cumprimento de obrigação</strong></div>
+      <div class="card-body">
+        <form method="post" action="{{ url_for('main.entrega_nova', id=empresa.id) }}" class="row g-2">
+          <div class="col-md-4"><label class="form-label small">Obrigação</label>
+            <select class="form-select" name="obrigacao_id" required>
+              {% for o in obrigacoes_aplicaveis %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-3"><label class="form-label small">Competência</label><input type="month" class="form-control" name="competencia" required></div>
+          <div class="col-md-3"><label class="form-label small">Data</label><input type="date" class="form-control" name="data_entrega" value="{{ hoje.isoformat() }}"></div>
+          <div class="col-md-2"><label class="form-label small">Por</label>
+            <select class="form-select" name="responsavel_id">
+              <option value="">—</option>
+              {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if empresa.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
+            </select></div>
+          <div class="col-md-10"><input class="form-control" name="observacao" placeholder="Observação (opcional)"></div>
+          <div class="col-md-2 d-grid"><button class="btn btn-success">Registrar</button></div>
+        </form>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><strong>Histórico</strong></div>
+      <div class="table-responsive" style="max-height: 420px">
+      <table class="table table-sm align-middle mb-0">
+        <thead class="table-light sticky-top"><tr><th>Competência</th><th>Obrigação</th><th>Data</th><th>Por</th><th>Obs.</th><th></th></tr></thead>
+        <tbody>
+        {% for en in empresa.entregas %}
+          <tr>
+            <td>{{ en.competencia | competencia }}</td><td>{{ en.obrigacao.nome }}</td><td>{{ en.data_entrega | data_br }}</td>
+            <td>{{ en.responsavel.nome if en.responsavel else '—' }}</td><td class="small">{{ en.observacao or '' }}</td>
+            <td class="text-end"><form method="post" action="{{ url_for('main.entrega_remover', id=en.id) }}" onsubmit="return confirm('Remover este registro?')"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form></td>
+          </tr>
+        {% else %}
+          <tr><td colspan="6" class="text-center text-muted py-3">Nenhum registro ainda.</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      </div>
+    </div>
+  </div>
+
+  <div class="col-lg-5">
+    <div class="card mb-4">
+      <div class="card-header"><strong>Exceções desta empresa</strong></div>
+      <div class="card-body">
+        <p class="small text-muted">Por padrão a empresa segue as obrigações de <em>{{ empresa.regime.nome }}</em>. Use as exceções para incluir ou dispensar obrigações só para ela.</p>
+        <ul class="list-group mb-3">
+          {% for a in empresa.ajustes %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+              <span><span class="badge {{ 'text-bg-info' if a.tipo == 'incluir' else 'text-bg-secondary' }}">{{ 'Inclui' if a.tipo == 'incluir' else 'Dispensa' }}</span> {{ a.obrigacao.nome }}</span>
+              <form method="post" action="{{ url_for('main.empresa_ajuste_remover', id=empresa.id, ajuste_id=a.id) }}"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form>
+            </li>
+          {% else %}
+            <li class="list-group-item text-muted small">Nenhuma exceção.</li>
+          {% endfor %}
+        </ul>
+        {% if podem_incluir %}
+        <form method="post" action="{{ url_for('main.empresa_ajuste_novo', id=empresa.id) }}" class="input-group mb-2">
+          <input type="hidden" name="tipo" value="incluir">
+          <select class="form-select" name="obrigacao_id">{% for o in podem_incluir %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}</select>
+          <button class="btn btn-outline-info">Incluir</button>
+        </form>
+        {% endif %}
+        {% if podem_excluir %}
+        <form method="post" action="{{ url_for('main.empresa_ajuste_novo', id=empresa.id) }}" class="input-group">
+          <input type="hidden" name="tipo" value="excluir">
+          <select class="form-select" name="obrigacao_id">{% for o in podem_excluir %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}</select>
+          <button class="btn btn-outline-secondary">Dispensar</button>
+        </form>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-header"><strong>Dados cadastrais</strong></div>
+      <div class="card-body small">
+        <dl class="row mb-0">
+          <dt class="col-5">Inscr. estadual</dt><dd class="col-7">{{ empresa.inscricao_estadual or '—' }}</dd>
+          <dt class="col-5">Inscr. municipal</dt><dd class="col-7">{{ empresa.inscricao_municipal or '—' }}</dd>
+          <dt class="col-5">E-mail</dt><dd class="col-7">{{ empresa.email or '—' }}</dd>
+          <dt class="col-5">Telefone</dt><dd class="col-7">{{ empresa.telefone or '—' }}</dd>
+          <dt class="col-5">Observações</dt><dd class="col-7" style="white-space: pre-wrap">{{ empresa.observacoes or '—' }}</dd>
+        </dl>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}

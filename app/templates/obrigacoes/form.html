@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+{% block title %}Obrigação{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">{{ 'Editar obrigação' if obrigacao.id else 'Nova obrigação' }}</h1>
+<form method="post" class="card card-body">
+  <div class="row g-3">
+    <div class="col-md-6"><label class="form-label">Nome *</label><input class="form-control" name="nome" value="{{ obrigacao.nome or '' }}" required></div>
+    <div class="col-md-6"><label class="form-label">Descrição</label><input class="form-control" name="descricao" value="{{ obrigacao.descricao or '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Periodicidade</label>
+      <select class="form-select" name="periodicidade">{% for k, v in PERIODICIDADES.items() %}<option value="{{ k }}" {{ 'selected' if obrigacao.periodicidade == k }}>{{ v }}</option>{% endfor %}</select>
+      <div class="form-text">Define qual competência deve estar cumprida para a obrigação ficar "em dia".</div></div>
+    <div class="col-md-4"><label class="form-label">Esfera</label>
+      <select class="form-select" name="esfera">{% for k, v in ESFERAS.items() %}<option value="{{ k }}" {{ 'selected' if obrigacao.esfera == k }}>{{ v }}</option>{% endfor %}</select></div>
+    <div class="col-md-4"><label class="form-label">Dia de vencimento</label><input type="number" min="1" max="31" class="form-control" name="dia_vencimento" value="{{ obrigacao.dia_vencimento or '' }}"></div>
+    <div class="col-12"><label class="form-label">Exigida para as tributações</label>
+      <div class="d-flex flex-wrap gap-3">
+        {% for r in regimes %}
+          <div class="form-check"><input class="form-check-input" type="checkbox" name="regimes" value="{{ r.id }}" id="r{{ r.id }}" {{ 'checked' if r in obrigacao.regimes }}><label class="form-check-label" for="r{{ r.id }}">{{ r.nome }}</label></div>
+        {% endfor %}
+      </div></div>
+    <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if obrigacao.ativo }}><label class="form-check-label" for="ativo">Ativa</label></div>
+  </div>
+  <div class="d-flex gap-2 mt-3"><button class="btn btn-primary">Salvar</button><a class="btn btn-outline-secondary" href="{{ url_for('main.obrigacoes_lista') }}">Cancelar</a></div>
+</form>
+{% endblock %}

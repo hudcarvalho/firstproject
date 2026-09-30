@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_ativo %}
+{% block title %}Regimes tributários{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Regimes tributários</h1>
+  <a class="btn btn-primary" href="{{ url_for('main.regime_form') }}">+ Novo regime</a>
+</div>
+<div class="card"><table class="table table-hover align-middle mb-0">
+  <thead class="table-light"><tr><th>Nome</th><th>Descrição</th><th>Obrigações</th><th>Empresas</th><th>Situação</th><th></th></tr></thead>
+  <tbody>
+  {% for r in regimes %}
+    <tr><td>{{ r.nome }}</td><td class="small text-muted">{{ r.descricao or '' }}</td><td>{{ r.obrigacoes | length }}</td><td>{{ r.empresas | length }}</td><td>{{ badge_ativo(r.ativo) }}</td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.regime_form', id=r.id) }}">Editar</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

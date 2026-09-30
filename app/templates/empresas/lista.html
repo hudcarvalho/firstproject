@@ -1,0 +1,32 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_ativo %}
+{% block title %}Clientes{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Clientes</h1>
+  <div>
+    {% if mostrar_inativas %}<a class="btn btn-outline-secondary" href="{{ url_for('main.empresas_lista') }}">Ocultar inativas</a>
+    {% else %}<a class="btn btn-outline-secondary" href="{{ url_for('main.empresas_lista', inativas=1) }}">Mostrar inativas</a>{% endif %}
+    <a class="btn btn-primary" href="{{ url_for('main.empresa_nova') }}">+ Nova empresa</a>
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-hover align-middle mb-0">
+  <thead class="table-light"><tr><th>Razão social</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>Situação</th><th></th></tr></thead>
+  <tbody>
+  {% for e in empresas %}
+    <tr>
+      <td><a href="{{ url_for('main.empresa_detalhe', id=e.id) }}">{{ e.razao_social }}</a>{% if e.nome_fantasia %}<div class="small text-muted">{{ e.nome_fantasia }}</div>{% endif %}</td>
+      <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
+      <td>{{ e.regime.nome }}</td>
+      <td>{{ e.responsavel.nome if e.responsavel else '—' }}</td>
+      <td>{{ badge_ativo(e.ativo) }}</td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.empresa_editar', id=e.id) }}">Editar</a></td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma empresa cadastrada.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% endblock %}
