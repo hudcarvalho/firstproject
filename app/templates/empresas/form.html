@@ -5,8 +5,9 @@
 <form method="post" class="card card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2 class="h6 text-uppercase text-muted">Identificação</h2>
   <div class="row g-3 mb-4">
-    <div class="col-md-6"><label class="form-label">Razão social *</label><input class="form-control" name="razao_social" value="{{ empresa.razao_social or '' }}" required></div>
-    <div class="col-md-6"><label class="form-label">Nome fantasia</label><input class="form-control" name="nome_fantasia" value="{{ empresa.nome_fantasia or '' }}"></div>
+    <div class="col-md-2"><label class="form-label">Código</label><input class="form-control" name="codigo" value="{{ empresa.codigo or '' }}"></div>
+    <div class="col-md-5"><label class="form-label">Razão social *</label><input class="form-control" name="razao_social" value="{{ empresa.razao_social or '' }}" required></div>
+    <div class="col-md-5"><label class="form-label">Nome fantasia</label><input class="form-control" name="nome_fantasia" value="{{ empresa.nome_fantasia or '' }}"></div>
     <div class="col-md-4"><label class="form-label">CNPJ *</label><input class="form-control" name="cnpj" id="cnpj" value="{{ empresa.cnpj_formatado if empresa.cnpj else '' }}" placeholder="00.000.000/0000-00" required></div>
     <div class="col-md-4"><label class="form-label">Inscrição estadual</label><input class="form-control" name="inscricao_estadual" value="{{ empresa.inscricao_estadual or '' }}"></div>
     <div class="col-md-4"><label class="form-label">Inscrição municipal</label><input class="form-control" name="inscricao_municipal" value="{{ empresa.inscricao_municipal or '' }}"></div>

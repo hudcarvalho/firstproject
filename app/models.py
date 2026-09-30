@@ -118,6 +118,7 @@ class Empresa(db.Model):
     """Cadastro do cliente — compartilhado por todos os módulos."""
 
     id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), index=True)  # código interno do escritório
     razao_social = db.Column(db.String(200), nullable=False)
     nome_fantasia = db.Column(db.String(200))
     cnpj = db.Column(db.String(14), unique=True, nullable=False)  # só dígitos

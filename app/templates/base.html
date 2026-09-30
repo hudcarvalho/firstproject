@@ -33,13 +33,15 @@
         <li class="nav-item"><a class="nav-link {{ 'active' if ep.startswith('main.empresa') and not mod_atual }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
         {% if current_user.admin %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
+          <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep or 'importar' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('main.regimes_lista') }}">Regimes tributários</a></li>
             <li><a class="dropdown-item" href="{{ url_for('main.responsaveis_lista') }}">Responsáveis</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('main.modulos_lista') }}">Módulos</a></li>
             <li><a class="dropdown-item" href="{{ url_for('auth.usuarios_lista') }}">Usuários</a></li>
+            <li><hr class="dropdown-divider"></li>
+            <li><a class="dropdown-item" href="{{ url_for('main.importar') }}">Importar clientes</a></li>
           </ul>
         </li>
         {% endif %}

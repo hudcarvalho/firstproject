@@ -8,7 +8,7 @@
 </div>
 
 <form class="row g-2 mb-3" method="get">
-  <div class="col-md-4"><input class="form-control" name="q" value="{{ filtros.q }}" placeholder="Buscar por nome ou CNPJ"></div>
+  <div class="col-md-4"><input class="form-control" name="q" value="{{ filtros.q }}" placeholder="Buscar por nome, CNPJ ou código"></div>
   <div class="col-md-3">
     <select class="form-select" name="responsavel">
       <option value="">Todos os responsáveis</option>
@@ -29,11 +29,12 @@
   <div class="table-responsive">
     <table class="table table-hover align-middle mb-0">
       <thead class="table-light">
-        <tr><th>Empresa</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>{{ modulo.rotulo_controle }}</th><th>Obrigações</th></tr>
+        <tr><th>Cód.</th><th>Empresa</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>{{ modulo.rotulo_controle }}</th><th>Obrigações</th></tr>
       </thead>
       <tbody>
       {% for l in linhas %}{% set e = l.empresa %}{% set link = url_for('main.empresa_modulo', id=e.id, modulo=modulo.codigo) %}
         <tr class="linha-link" onclick="location.href='{{ link }}'">
+          <td class="text-muted">{{ e.codigo or '' }}</td>
           <td><a href="{{ link }}" class="fw-semibold text-decoration-none">{{ e.nome_exibicao }}</a>
             {% if e.nome_fantasia %}<div class="small text-muted">{{ e.razao_social }}</div>{% endif %}</td>
           <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
@@ -41,13 +42,14 @@
           <td>{{ l.controle.responsavel.nome if l.controle and l.controle.responsavel else '—' }}</td>
           <td class="text-nowrap">{{ (l.controle.concluido_ate if l.controle) | competencia }} {{ badge_atraso(l.atraso) }}</td>
           <td class="text-nowrap">
-            {% if l.pendentes %}<span class="badge text-bg-danger">{{ l.pendentes }} pendente{{ 's' if l.pendentes > 1 }}</span>
+            {% if not l.total %}<span class="small text-muted">sem obrigações</span>
+            {% elif l.pendentes %}<span class="badge text-bg-danger">{{ l.pendentes }} pendente{{ 's' if l.pendentes > 1 }}</span>
             {% else %}<span class="badge text-bg-success">em dia</span>{% endif %}
-            <span class="small text-muted">de {{ l.total }}</span>
+            {% if l.total %}<span class="small text-muted">de {{ l.total }}</span>{% endif %}
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma empresa encontrada. <a href="{{ url_for('main.empresa_nova') }}">Cadastrar empresa</a></td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">Nenhuma empresa encontrada. <a href="{{ url_for('main.empresa_nova') }}">Cadastrar empresa</a></td></tr>
       {% endfor %}
       </tbody>
     </table>
