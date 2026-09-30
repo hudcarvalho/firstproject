@@ -117,3 +117,41 @@ def test_inativar_socio(client, app, empresas):
     client.post(f"/distribuicao/{b}?ano=2026", data={f"v-{com}-6": "999"})
     with app.app_context():
         assert DistribuicaoLucro.query.count() == 1
+
+
+def test_quotas_dos_socios(client, app, empresas):
+    a, _ = empresas
+    url = f"/distribuicao/{a}"
+    client.post(f"{url}/socios", data={"nome": "Ana", "documento": CPF1, "percentual": "60"})
+    r = client.post(f"{url}/socios", data={"nome": "Bruno", "documento": CPF2, "percentual": "150"},
+                    follow_redirects=True)
+    assert "entre 0 e 100" in r.get_data(as_text=True)
+    client.post(f"{url}/socios", data={"nome": "Bruno", "documento": CPF2})
+    with app.app_context():
+        ana = Socio.query.filter_by(nome="Ana").one()
+        assert ana.percentual == Decimal("60.00")
+        ana_id, bruno_id = ana.id, Socio.query.filter_by(nome="Bruno").one().id
+
+    # somando 90%: grava, mas avisa
+    r = client.post(f"{url}/quotas", data={f"pct-{ana_id}": "60,00", f"pct-{bruno_id}": "30%"},
+                    follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert "Quotas salvas" in html and "somam 90,00%" in html
+
+    # somando 100%: sem aviso; valor aparece formatado na tabela
+    r = client.post(f"{url}/quotas", data={f"pct-{ana_id}": "66,67", f"pct-{bruno_id}": "33,33"},
+                    follow_redirects=True)
+    html = r.get_data(as_text=True)
+    assert "somam" not in html and 'value="66,67"' in html and "100,00" in html
+
+    # inválido não grava nada
+    r = client.post(f"{url}/quotas", data={f"pct-{ana_id}": "abc", f"pct-{bruno_id}": "10"},
+                    follow_redirects=True)
+    assert "não é um percentual" in r.get_data(as_text=True)
+    with app.app_context():
+        assert db.session.get(Socio, bruno_id).percentual == Decimal("33.33")
+
+    # campo vazio limpa o percentual
+    client.post(f"{url}/quotas", data={f"pct-{bruno_id}": ""})
+    with app.app_context():
+        assert db.session.get(Socio, bruno_id).percentual is None

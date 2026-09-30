@@ -268,6 +268,7 @@ class Socio(db.Model):
     empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False, index=True)
     nome = db.Column(db.String(200), nullable=False)
     documento = db.Column(db.String(14), nullable=False)  # CPF ou CNPJ, só dígitos
+    percentual = db.Column(db.Numeric(6, 2))  # participação no capital (quotas), em %
     ativo = db.Column(db.Boolean, default=True, nullable=False)
 
     empresa = db.relationship("Empresa", back_populates="socios")
