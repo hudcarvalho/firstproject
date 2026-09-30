@@ -6,7 +6,7 @@ from flask_migrate import Migrate, stamp, upgrade
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from .competencia import fmt_competencia, input_competencia
+from .competencia import fmt_competencia, fmt_documento, fmt_valor, input_competencia
 from .models import ESFERAS, PERIODICIDADES, Modulo, db
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "migrations")
@@ -61,6 +61,8 @@ def create_app(config=None):
 
     app.jinja_env.filters["competencia"] = fmt_competencia
     app.jinja_env.filters["input_competencia"] = input_competencia
+    app.jinja_env.filters["documento"] = fmt_documento
+    app.jinja_env.filters["valor"] = fmt_valor
     app.jinja_env.filters["data_br"] = lambda d: d.strftime("%d/%m/%Y") if d else "—"
     app.jinja_env.globals.update(PERIODICIDADES=PERIODICIDADES, ESFERAS=ESFERAS)
 
@@ -70,6 +72,9 @@ def create_app(config=None):
 
     from .routes import bp
     app.register_blueprint(bp)
+
+    from .distribuicao import bp as bp_distribuicao
+    app.register_blueprint(bp_distribuicao)
 
     from .cli import registrar_comandos
     registrar_comandos(app)

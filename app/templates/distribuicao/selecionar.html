@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block title %}Distribuição de Lucros{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Distribuição de Lucros</h1>
+<div class="card card-body mb-4" style="max-width: 760px">
+  <label class="form-label">Selecione o cliente</label>
+  {% with autofocus=True %}{% include "distribuicao/_busca.html" %}{% endwith %}
+  <div class="form-text">Comece a digitar o código ou parte do nome e escolha na lista.</div>
+</div>
+{% if encontrados|length > 1 %}
+<div class="card" style="max-width: 760px">
+  <div class="card-header"><strong>{{ encontrados|length }} clientes encontrados</strong> — escolha um</div>
+  <div class="list-group list-group-flush">
+    {% for e in encontrados %}
+    <a class="list-group-item list-group-item-action" href="{{ url_for('distribuicao.empresa', id=e.id) }}">
+      <span class="text-muted me-2">{{ e.codigo or '' }}</span>{{ e.razao_social }}
+      <span class="small text-muted ms-2">{{ e.cnpj_formatado }}</span>
+    </a>
+    {% endfor %}
+  </div>
+</div>
+{% endif %}
+{% endblock %}
