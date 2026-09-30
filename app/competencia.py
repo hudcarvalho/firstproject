@@ -73,3 +73,53 @@ def cnpj_valido(cnpj):
     d1 = dv(c[:12], p1)
     d2 = dv(c[:12] + d1, [6] + p1)
     return c[12:] == d1 + d2
+
+
+def cpf_valido(cpf):
+    c = so_digitos(cpf)
+    if len(c) != 11 or c == c[0] * 11:
+        return False
+    for tamanho in (9, 10):
+        soma = sum(int(c[i]) * (tamanho + 1 - i) for i in range(tamanho))
+        digito = (soma * 10 % 11) % 10
+        if int(c[tamanho]) != digito:
+            return False
+    return True
+
+
+def fmt_documento(doc):
+    """CPF (11 dígitos) ou CNPJ (14 dígitos) com pontuação."""
+    d = so_digitos(doc)
+    if len(d) == 11:
+        return f"{d[:3]}.{d[3:6]}.{d[6:9]}-{d[9:]}"
+    if len(d) == 14:
+        return f"{d[:2]}.{d[2:5]}.{d[5:8]}/{d[8:12]}-{d[12:]}"
+    return doc or ""
+
+
+def parse_valor(texto):
+    """Valor em reais digitado no formato brasileiro ("1.234,56") -> Decimal; vazio -> None.
+
+    Levanta ValueError se não for um número.
+    """
+    from decimal import Decimal, InvalidOperation
+    t = (texto or "").strip().replace("R$", "").replace(" ", "")
+    if not t:
+        return None
+    if "," in t:
+        t = t.replace(".", "").replace(",", ".")
+    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", t):
+        t = t.replace(".", "")  # "2.000" e "1.500.000": ponto como separador de milhar
+    try:
+        valor = Decimal(t).quantize(Decimal("0.01"))
+    except InvalidOperation:
+        raise ValueError(texto)
+    return valor
+
+
+def fmt_valor(valor, vazio=""):
+    """Decimal -> "1.234,56" (sem R$)."""
+    if valor is None:
+        return vazio
+    inteiro, _, centavos = f"{valor:,.2f}".partition(".")
+    return inteiro.replace(",", ".") + "," + centavos

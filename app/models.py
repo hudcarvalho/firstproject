@@ -141,6 +141,9 @@ class Empresa(db.Model):
         "Entrega", back_populates="empresa", cascade="all, delete-orphan",
         order_by="Entrega.competencia.desc()",
     )
+    socios = db.relationship(
+        "Socio", back_populates="empresa", cascade="all, delete-orphan", order_by="Socio.nome",
+    )
 
     @property
     def cnpj_formatado(self):
@@ -256,6 +259,41 @@ class Entrega(db.Model):
     responsavel = db.relationship("Responsavel")
 
     __table_args__ = (db.UniqueConstraint("empresa_id", "obrigacao_id", "competencia"),)
+
+
+class Socio(db.Model):
+    """Sócio de uma empresa cliente (pessoa física ou jurídica)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False, index=True)
+    nome = db.Column(db.String(200), nullable=False)
+    documento = db.Column(db.String(14), nullable=False)  # CPF ou CNPJ, só dígitos
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+
+    empresa = db.relationship("Empresa", back_populates="socios")
+    distribuicoes = db.relationship(
+        "DistribuicaoLucro", back_populates="socio", cascade="all, delete-orphan"
+    )
+
+    __table_args__ = (db.UniqueConstraint("empresa_id", "documento"),)
+
+    @property
+    def tipo_documento(self):
+        return "CPF" if len(self.documento or "") == 11 else "CNPJ"
+
+
+class DistribuicaoLucro(db.Model):
+    """Valor de lucro distribuído a um sócio em um mês."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    socio_id = db.Column(db.Integer, db.ForeignKey("socio.id"), nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    mes = db.Column(db.Integer, nullable=False)  # 1 a 12
+    valor = db.Column(db.Numeric(14, 2), nullable=False)
+
+    socio = db.relationship("Socio", back_populates="distribuicoes")
+
+    __table_args__ = (db.UniqueConstraint("socio_id", "ano", "mes"),)
 
 
 class Usuario(UserMixin, db.Model):

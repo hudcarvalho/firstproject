@@ -1,0 +1,147 @@
+{% extends "base.html" %}
+{% block title %}Distribuição de Lucros · {{ empresa.nome_exibicao }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-start flex-wrap gap-3 mb-3">
+  <div>
+    <div class="small text-muted">Distribuição de Lucros</div>
+    <h1 class="h3 mb-1">{{ empresa.razao_social }}</h1>
+    <div class="text-muted">{% if empresa.codigo %}Cód. {{ empresa.codigo }} · {% endif %}{{ empresa.cnpj_formatado }} · {{ empresa.regime.nome }}
+      · <a href="{{ url_for('main.empresa_detalhe', id=empresa.id) }}">ver empresa</a></div>
+  </div>
+  <div style="min-width: 380px">{% with busca='' %}{% include "distribuicao/_busca.html" %}{% endwith %}</div>
+</div>
+
+{# ------------------------------------------------ Sócios #}
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center">
+    <strong>Sócios</strong>
+    <button class="btn btn-sm btn-primary" type="button" data-bs-toggle="collapse" data-bs-target="#novo-socio">+ Novo sócio</button>
+  </div>
+  <div class="collapse" id="novo-socio">
+    <form method="post" action="{{ url_for('distribuicao.socio_novo', id=empresa.id, ano=ano) }}" class="row g-2 p-3 border-bottom bg-light"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-md-6"><label class="form-label small">Nome *</label><input class="form-control" name="nome" required></div>
+      <div class="col-md-4"><label class="form-label small">CPF / CNPJ *</label><input class="form-control" name="documento" id="documento-socio" required placeholder="000.000.000-00"></div>
+      <div class="col-md-2 d-flex align-items-end"><button class="btn btn-success w-100">Cadastrar</button></div>
+    </form>
+  </div>
+  <table class="table align-middle mb-0">
+    <thead class="table-light"><tr><th>Nome</th><th>CPF / CNPJ</th><th>Situação</th><th></th></tr></thead>
+    <tbody>
+    {% for s in empresa.socios %}
+      <tr class="{{ 'text-muted' if not s.ativo }}">
+        <td>{{ s.nome }}</td>
+        <td class="text-nowrap">{{ s.documento | documento }} <span class="small text-muted">{{ s.tipo_documento }}</span></td>
+        <td>{% if s.ativo %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Inativo</span>{% endif %}</td>
+        <td class="text-end">
+          <form method="post" action="{{ url_for('distribuicao.socio_situacao', socio_id=s.id, ano=ano) }}"
+                onsubmit="return confirm('{{ 'Inativar' if s.ativo else 'Reativar' }} o sócio {{ s.nome|e }}?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm {{ 'btn-outline-danger' if s.ativo else 'btn-outline-success' }}">{{ 'Inativar' if s.ativo else 'Reativar' }}</button>
+          </form>
+        </td>
+      </tr>
+    {% else %}
+      <tr><td colspan="4" class="text-center text-muted py-3">Nenhum sócio cadastrado. Use “+ Novo sócio”.</td></tr>
+    {% endfor %}
+    </tbody>
+  </table>
+</div>
+
+{# ------------------------------------------------ Valores mensais #}
+<form method="post" action="{{ url_for('distribuicao.empresa', id=empresa.id, ano=ano) }}" class="card" id="form-valores"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <strong>Lucros distribuídos (R$)</strong>
+    <div class="d-flex align-items-center gap-2">
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('distribuicao.empresa', id=empresa.id, ano=ano - 1) }}">‹ {{ ano - 1 }}</a>
+      <span class="fw-semibold px-2">{{ ano }}</span>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('distribuicao.empresa', id=empresa.id, ano=ano + 1) }}">{{ ano + 1 }} ›</a>
+    </div>
+  </div>
+  {% if linhas %}
+  <div class="table-responsive">
+  <table class="table table-sm table-bordered align-middle mb-0 grade-valores">
+    <thead class="table-light">
+      <tr><th class="col-socio">Sócio</th>{% for m in meses %}<th class="text-center">{{ m }}</th>{% endfor %}<th class="text-end col-total">Total</th></tr>
+    </thead>
+    <tbody>
+    {% for l in linhas %}{% set s = l.socio %}
+      <tr data-linha>
+        <td class="col-socio">{{ s.nome }}{% if not s.ativo %} <span class="badge text-bg-secondary">inativo</span>{% endif %}
+          <div class="small text-muted">{{ s.documento | documento }}</div></td>
+        {% for v in l.meses %}{% set campo = 'v-' ~ s.id ~ '-' ~ loop.index %}
+        <td><input class="form-control form-control-sm text-end valor" name="{{ campo }}" inputmode="decimal"
+                   data-mes="{{ loop.index0 }}" value="{{ valores_digitados.get(campo, '') if valores_digitados else (v | valor) }}" placeholder="0,00"></td>
+        {% endfor %}
+        <td class="text-end fw-semibold text-nowrap total-linha col-total">{{ l.total | valor }}</td>
+      </tr>
+    {% endfor %}
+    </tbody>
+    <tfoot class="table-light fw-semibold">
+      <tr><td>Total</td>{% for t in totais_mes %}<td class="text-end text-nowrap total-mes">{{ t | valor }}</td>{% endfor %}
+        <td class="text-end text-nowrap col-total" id="total-geral">{{ total_geral | valor }}</td></tr>
+    </tfoot>
+  </table>
+  </div>
+  <div class="card-footer d-flex justify-content-between align-items-center">
+    <span class="small text-muted">Digite no formato 1.234,56. Deixe em branco os meses sem distribuição.</span>
+    <button class="btn btn-primary">Salvar {{ ano }}</button>
+  </div>
+  {% else %}
+  <div class="card-body text-muted">Cadastre ao menos um sócio ativo para lançar os valores.</div>
+  {% endif %}
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  // Máscara simples de CPF/CNPJ no cadastro do sócio
+  const doc = document.getElementById('documento-socio');
+  if (doc) doc.addEventListener('input', function () {
+    const d = this.value.replace(/\D/g, '').slice(0, 14);
+    this.value = d.length <= 11
+      ? d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2')
+      : d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+  });
+
+  // Totais recalculados enquanto digita
+  const paraNumero = t => {
+    t = (t || '').replace(/[R$\s]/g, '');
+    if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.');
+    else if (/^\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');  // "2.000" = dois mil
+    const n = parseFloat(t);
+    return isNaN(n) ? 0 : n;
+  };
+  const formatar = n => n.toLocaleString('pt-BR', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+  const linhas = Array.from(document.querySelectorAll('tr[data-linha]'));
+  const totaisMes = Array.from(document.querySelectorAll('.total-mes'));
+  const totalGeral = document.getElementById('total-geral');
+
+  function recalcular() {
+    const porMes = new Array(12).fill(0);
+    let geral = 0;
+    for (const tr of linhas) {
+      let soma = 0;
+      tr.querySelectorAll('input.valor').forEach(inp => {
+        const n = paraNumero(inp.value);
+        soma += n; porMes[+inp.dataset.mes] += n;
+      });
+      tr.querySelector('.total-linha').textContent = formatar(soma);
+      geral += soma;
+    }
+    totaisMes.forEach((td, i) => { td.textContent = formatar(porMes[i]); });
+    if (totalGeral) totalGeral.textContent = formatar(geral);
+  }
+  document.querySelectorAll('input.valor').forEach(inp => {
+    inp.addEventListener('input', recalcular);
+    inp.addEventListener('blur', () => { if (inp.value.trim()) inp.value = formatar(paraNumero(inp.value)); });
+  });
+
+  // Aviso ao sair com valores não salvos
+  const form = document.getElementById('form-valores');
+  let alterado = false;
+  form.addEventListener('input', () => { alterado = true; });
+  form.addEventListener('submit', () => { alterado = false; });
+  window.addEventListener('beforeunload', e => { if (alterado) { e.preventDefault(); e.returnValue = ''; } });
+})();
+</script>
+{% endblock %}

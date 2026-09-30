@@ -30,6 +30,7 @@
           </ul>
         </li>
         {% endfor %}
+        <li class="nav-item"><a class="nav-link {{ 'active' if ep.startswith('distribuicao.') }}" href="{{ url_for('distribuicao.selecionar') }}">Distribuição de Lucros</a></li>
         <li class="nav-item"><a class="nav-link {{ 'active' if ep.startswith('main.empresa') and not mod_atual }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
         {% if current_user.admin %}
         <li class="nav-item dropdown">

@@ -1,0 +1,18 @@
+{# Busca de cliente por código ou nome (lista com sugestões enquanto digita) #}
+<form method="get" action="{{ url_for('distribuicao.selecionar') }}" class="d-flex gap-2" id="form-busca-cliente">
+  <input class="form-control" name="busca" list="lista-clientes" value="{{ busca or '' }}" autocomplete="off"
+         placeholder="Digite o código ou o nome do cliente" {{ 'autofocus' if autofocus }} required>
+  <datalist id="lista-clientes">
+    {% for c in clientes %}<option value="{{ (c.codigo ~ ' — ') if c.codigo }}{{ c.razao_social }}"></option>{% endfor %}
+  </datalist>
+  <button class="btn btn-primary">Abrir</button>
+</form>
+<script>
+(function () {
+  const form = document.getElementById('form-busca-cliente');
+  const campo = form.querySelector('input[name=busca]');
+  const opcoes = new Set(Array.from(document.querySelectorAll('#lista-clientes option')).map(o => o.value));
+  // escolheu uma sugestão da lista: abre direto
+  campo.addEventListener('change', () => { if (opcoes.has(campo.value)) form.submit(); });
+})();
+</script>
