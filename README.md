@@ -39,6 +39,12 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   - Módulos (ativar/desativar e nome do controle de andamento);
   - Usuários.
 - **Login**: todo acesso exige usuário e senha (ver "Usuários e acesso").
+- **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
+  .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável e
+  Observações. Mostra uma prévia antes de gravar; não duplica CNPJs já cadastrados; cria os
+  responsáveis que não existirem; interpreta o regime (em mudanças como
+  "SIMPLES/ PRESUMIDO EM 2026" vale o último) e usa "A definir" quando não dá para saber,
+  guardando o texto original nas observações.
 
 Na primeira execução o banco é criado com os regimes (Simples Nacional, Lucro
 Presumido, Lucro Real, MEI, Imune/Isenta) e um conjunto de obrigações de exemplo

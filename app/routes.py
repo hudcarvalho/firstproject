@@ -5,14 +5,22 @@ Tudo que é da rotina de uma área fica sob o código do módulo: /contabil/, /c
 /empresas/<id>/contabil… Ao ativar um novo módulo (Fiscal, DP, Paralegal) as mesmas telas
 passam a atendê-lo.
 """
+import os
+import re
+import secrets
+import time
 from datetime import date
 
-from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
+from flask import (
+    Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
+)
 from sqlalchemy.exc import IntegrityError
+from sqlalchemy.orm import selectinload
 
+from . import importacao
 from .competencia import cnpj_valido, parse_competencia, so_digitos
 from .models import (
-    ESFERAS, PERIODICIDADES, Empresa, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
+    ESFERAS, PERIODICIDADES, Empresa, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
     RegimeTributario, Responsavel, db,
 )
 
@@ -39,6 +47,16 @@ def _int_or_none(valor):
         return int(valor)
     except (TypeError, ValueError):
         return None
+
+
+def _com_relacionamentos(query):
+    """Carrega de uma vez o que as listas de empresas usam (evita uma consulta por linha)."""
+    return query.options(
+        selectinload(Empresa.regime).selectinload(RegimeTributario.obrigacoes),
+        selectinload(Empresa.controles).selectinload(EmpresaModulo.responsavel),
+        selectinload(Empresa.ajustes).selectinload(EmpresaObrigacaoAjuste.obrigacao),
+        selectinload(Empresa.entregas),
+    )
 
 
 def _responsaveis_ativos():
@@ -69,12 +87,12 @@ def painel(modulo):
         like = f"%{busca}%"
         q = q.filter(
             Empresa.razao_social.ilike(like) | Empresa.nome_fantasia.ilike(like)
-            | Empresa.cnpj.ilike(f"%{so_digitos(busca) or busca}%")
+            | Empresa.cnpj.ilike(f"%{so_digitos(busca) or busca}%") | (Empresa.codigo == busca)
         )
 
     hoje = date.today()
     linhas = []
-    for e in q.order_by(Empresa.razao_social):
+    for e in _com_relacionamentos(q).order_by(Empresa.razao_social):
         controle = e.controle(modulo)
         resp_id = controle.responsavel_id if controle else None
         if responsavel and (resp_id or 0) != _int_or_none(responsavel):
@@ -104,7 +122,7 @@ def empresas_lista():
     if not mostrar_inativas:
         q = q.filter_by(ativo=True)
     return render_template(
-        "empresas/lista.html", empresas=q.order_by(Empresa.razao_social).all(),
+        "empresas/lista.html", empresas=_com_relacionamentos(q).order_by(Empresa.razao_social).all(),
         mostrar_inativas=mostrar_inativas, modulos=Modulo.ativos(),
     )
 
@@ -125,6 +143,7 @@ def _form_empresa(empresa):
     if regime is None:
         erros.append("Selecione a tributação.")
 
+    empresa.codigo = f.get("codigo", "").strip() or None
     empresa.razao_social = f.get("razao_social", "").strip()
     empresa.nome_fantasia = f.get("nome_fantasia", "").strip() or None
     empresa.cnpj = cnpj
@@ -474,3 +493,94 @@ def modulo_form(id):
             flash("Módulo salvo.", "success")
             return redirect(url_for("main.modulos_lista"))
     return render_template("modulos/form.html", modulo=modulo)
+
+
+# ---------------------------------------------------------------- Importação de clientes
+
+def _pasta_importacoes():
+    pasta = os.path.join(current_app.instance_path, "importacoes")
+    os.makedirs(pasta, exist_ok=True)
+    return pasta
+
+
+def _arquivo_importacao(token):
+    """Caminho do arquivo enviado, a partir do token (nome gerado pelo sistema)."""
+    if not re.fullmatch(r"[0-9a-f]{32}\.(xls|xlsx|csv)", token or ""):
+        abort(404)
+    caminho = os.path.join(_pasta_importacoes(), token)
+    if not os.path.exists(caminho):
+        flash("Arquivo da importação não encontrado. Envie a planilha novamente.", "warning")
+        return None
+    return caminho
+
+
+def _limpar_importacoes_antigas():
+    limite = time.time() - 24 * 3600
+    for nome in os.listdir(_pasta_importacoes()):
+        caminho = os.path.join(_pasta_importacoes(), nome)
+        if os.path.getmtime(caminho) < limite:
+            os.remove(caminho)
+
+
+def _previa_importacao(caminho, aba):
+    with open(caminho, "rb") as f:
+        abas = importacao.ler_abas(f.read(), os.path.splitext(caminho)[1])
+    validas = importacao.abas_validas(abas)
+    if not validas:
+        return None, [], None
+    aba = aba if aba in validas else validas[0]
+    registros, colunas = importacao.extrair_linhas(abas[aba])
+    return importacao.analisar(registros, colunas), validas, aba
+
+
+@bp.route("/importar", methods=["GET", "POST"])
+def importar():
+    if request.method == "POST":
+        arquivo = request.files.get("arquivo")
+        extensao = os.path.splitext(arquivo.filename or "")[1].lower() if arquivo else ""
+        if extensao not in importacao.EXTENSOES:
+            flash("Envie uma planilha .xls, .xlsx ou .csv.", "danger")
+        else:
+            _limpar_importacoes_antigas()
+            token = secrets.token_hex(16) + extensao
+            arquivo.save(os.path.join(_pasta_importacoes(), token))
+            return redirect(url_for("main.importar_previa", token=token))
+    return render_template("importar/envio.html")
+
+
+@bp.route("/importar/<token>")
+def importar_previa(token):
+    caminho = _arquivo_importacao(token)
+    if caminho is None:
+        return redirect(url_for("main.importar"))
+    try:
+        previa, abas, aba = _previa_importacao(caminho, request.args.get("aba"))
+    except Exception:  # arquivo corrompido ou em formato inesperado
+        current_app.logger.exception("Falha ao ler planilha de importação")
+        flash("Não foi possível ler a planilha. Confira se o arquivo abre no Excel.", "danger")
+        return redirect(url_for("main.importar"))
+    if previa is None:
+        flash("Não encontrei as colunas Nome (ou Razão social) e CNPJ em nenhuma aba.", "danger")
+        return redirect(url_for("main.importar"))
+    return render_template("importar/previa.html", previa=previa, abas=abas, aba=aba, token=token,
+                           modulo=importacao.modulo_padrao())
+
+
+@bp.post("/importar/<token>/confirmar")
+def importar_confirmar(token):
+    caminho = _arquivo_importacao(token)
+    if caminho is None:
+        return redirect(url_for("main.importar"))
+    previa, _, _ = _previa_importacao(caminho, request.form.get("aba"))
+    resultado = importacao.aplicar(previa, importacao.modulo_padrao(),
+                                   atualizar_existentes=request.form.get("atualizar") == "on")
+    os.remove(caminho)
+    partes = [f"{resultado['criadas']} empresa(s) cadastrada(s)"]
+    if resultado["atualizadas"]:
+        partes.append(f"{resultado['atualizadas']} atualizada(s)")
+    if resultado["ignoradas"]:
+        partes.append(f"{resultado['ignoradas']} já existente(s) mantida(s)")
+    if resultado["erros"]:
+        partes.append(f"{resultado['erros']} com erro não importada(s)")
+    flash("Importação concluída: " + ", ".join(partes) + ".", "success")
+    return redirect(url_for("main.empresas_lista"))

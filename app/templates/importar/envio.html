@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}Importar clientes{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Importar clientes de planilha</h1>
+<div class="row g-4">
+  <div class="col-lg-6">
+    <form method="post" enctype="multipart/form-data" class="card card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <label class="form-label">Planilha (.xls, .xlsx ou .csv)</label>
+      <input type="file" class="form-control mb-3" name="arquivo" accept=".xls,.xlsx,.csv" required>
+      <div><button class="btn btn-primary">Enviar e conferir</button></div>
+      <p class="small text-muted mt-3 mb-0">Nada é gravado neste passo: primeiro o sistema mostra uma prévia para você conferir.</p>
+    </form>
+  </div>
+  <div class="col-lg-6">
+    <div class="card card-body small">
+      <strong class="mb-2">Colunas reconhecidas (pelo cabeçalho)</strong>
+      <ul class="mb-2">
+        <li><strong>Código</strong> — código interno do escritório</li>
+        <li><strong>Nome</strong> ou <strong>Razão social</strong> — obrigatório</li>
+        <li><strong>CNPJ</strong> — obrigatório, com ou sem pontuação</li>
+        <li><strong>Regime</strong> ou <strong>Tributação</strong> — Simples, Presumido, Real, Real Trimestral, MEI, Sem fins…</li>
+        <li><strong>Responsável</strong> — cadastrado automaticamente se ainda não existir</li>
+        <li><strong>Observações</strong></li>
+      </ul>
+      <span class="text-muted">As demais colunas são ignoradas. Empresas com CNPJ já cadastrado não são duplicadas.</span>
+    </div>
+  </div>
+</div>
+{% endblock %}

@@ -43,6 +43,7 @@ def create_app(config=None):
         SECRET_KEY=_secret_key(app.instance_path),
         SQLALCHEMY_DATABASE_URI=_database_url(app.instance_path),
         SESSION_COOKIE_SAMESITE="Lax",
+        MAX_CONTENT_LENGTH=10 * 1024 * 1024,  # uploads (importação de planilhas)
         SESSION_COOKIE_SECURE=cookie_seguro,
         REMEMBER_COOKIE_SECURE=cookie_seguro,
     )
