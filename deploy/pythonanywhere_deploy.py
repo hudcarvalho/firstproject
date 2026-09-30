@@ -1,8 +1,9 @@
 """Publica a versão atual do repositório no PythonAnywhere pela API.
 
-Usado pelo GitHub Actions (.github/workflows/deploy.yml) a cada atualização da main:
-envia os arquivos alterados, apaga os removidos, recarrega o site e confere /saude.
-As migrações do banco rodam sozinhas quando o site recarrega.
+Usado pelo GitHub Actions (.github/workflows/deploy.yml) a cada atualização da main.
+O servidor guarda em `.publicado` o commit da última publicação; o script envia só o que
+mudou desde ele (ou tudo, se não souber), apaga os arquivos removidos, recarrega o site e
+confere /saude. As migrações do banco rodam sozinhas quando o site recarrega.
 
 Variáveis de ambiente:
   PA_USERNAME   usuário do PythonAnywhere (obrigatória)
@@ -10,7 +11,7 @@ Variáveis de ambiente:
   PA_HOST       www.pythonanywhere.com (padrão) ou eu.pythonanywhere.com
   PA_DOMAIN     domínio do site (padrão: <usuario>.pythonanywhere.com)
   PA_PROJECT    pasta do projeto (padrão: /home/<usuario>/firstproject)
-  BASE_SHA      commit publicado antes; vazio = envia todos os arquivos
+  PUBLICAR_TUDO=1  ignora o `.publicado` e envia todos os arquivos
   (PA_API_BASE e PA_SITE_URL substituem os endereços — usados só em testes)
 """
 import json
@@ -23,7 +24,7 @@ import urllib.request
 import uuid
 
 IGNORAR = (".github/", "tests/")  # não precisam estar no servidor
-DEPENDENCIAS = {"requirements.txt"}
+MARCADOR = ".publicado"
 
 
 def git(*args):
@@ -31,8 +32,8 @@ def git(*args):
 
 
 def alteracoes(base):
-    """(arquivos a enviar, arquivos a apagar)."""
-    if base and set(base) != {"0"}:
+    """(arquivos a enviar, arquivos a apagar) desde o commit `base`, ou tudo se não houver."""
+    if base:
         try:
             saida = git("diff", "--name-status", "--no-renames", base, "HEAD")
         except subprocess.CalledProcessError:
@@ -71,6 +72,10 @@ class API:
                     continue
                 raise
 
+    def ler_arquivo(self, caminho):
+        status, corpo = self.chamar("GET", f"/files/path{caminho}")
+        return corpo if status == 200 else None
+
     def enviar_arquivo(self, destino, conteudo):
         limite = uuid.uuid4().hex
         corpo = (
@@ -106,19 +111,32 @@ def main():
     projeto = (os.environ.get("PA_PROJECT") or f"/home/{usuario}/firstproject").rstrip("/")
     api = API(host, usuario, token)
 
-    enviar, apagar = alteracoes(os.environ.get("BASE_SHA", "").strip())
-    enviar = [c for c in enviar if not c.startswith(IGNORAR)]
-    apagar = [c for c in apagar if not c.startswith(IGNORAR)]
-
-    if DEPENDENCIAS & set(enviar) and os.environ.get("BASE_SHA", "").strip():
+    # Dependências: o requirements.txt do servidor precisa ser igual ao do repositório.
+    with open("requirements.txt", "rb") as f:
+        requisitos = f.read()
+    no_servidor = api.ler_arquivo(f"{projeto}/requirements.txt")
+    if no_servidor is None:
+        print(f"::error::Projeto não encontrado em {projeto} no PythonAnywhere. Faça a "
+              "instalação inicial pelo console (veja o README).")
+        return 1
+    if no_servidor.strip() != requisitos.strip():
         print("::error::Esta atualização muda as dependências (requirements.txt), que precisam "
               "ser instaladas no servidor. Publique pelo console do PythonAnywhere (uma vez): "
               "cd ~/firstproject && git fetch && git reset --hard origin/main && "
               "bash deploy/pythonanywhere_setup.sh — e depois Reload na aba Web.")
         return 1
 
+    marcador = None if os.environ.get("PUBLICAR_TUDO") == "1" else api.ler_arquivo(
+        f"{projeto}/{MARCADOR}")
+    base = marcador.decode().strip() if marcador else ""
+    print(f"Versão no servidor: {base[:7] or 'desconhecida (envia tudo)'}; "
+          f"publicando: {git('rev-parse', 'HEAD').strip()[:7]}")
+    enviar, apagar = alteracoes(base)
+    enviar = [c for c in enviar if not c.startswith(IGNORAR)]
+    apagar = [c for c in apagar if not c.startswith(IGNORAR)]
+
     if not enviar and not apagar:
-        print("Nenhum arquivo do sistema mudou; nada a publicar.")
+        print("O servidor já está na versão atual; nada a publicar.")
         return 0
 
     print(f"Enviando {len(enviar)} arquivo(s) e removendo {len(apagar)} em {dominio}…")
@@ -145,6 +163,7 @@ def main():
         print(f"::error::O site não respondeu em https://{dominio}/saude após recarregar. "
               "Veja o Error log na aba Web do PythonAnywhere.")
         return 1
+    api.enviar_arquivo(f"{projeto}/{MARCADOR}", git("rev-parse", "HEAD").encode())
     print(f"Publicado com sucesso: https://{dominio}")
     return 0
 
