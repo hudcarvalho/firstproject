@@ -2,7 +2,7 @@
 {% block title %}Módulo{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">Módulo · {{ modulo.nome }}</h1>
-<form method="post" class="card card-body" style="max-width: 640px">
+<form method="post" class="card card-body" style="max-width: 640px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3"><label class="form-label">Nome *</label><input class="form-control" name="nome" value="{{ modulo.nome }}" required></div>
   <div class="mb-3"><label class="form-label">Rótulo do controle de andamento *</label><input class="form-control" name="rotulo_controle" value="{{ modulo.rotulo_controle }}" required>
     <div class="form-text">Ex.: “Escriturada até”, “Apurado até”, “Folha fechada até”.</div></div>

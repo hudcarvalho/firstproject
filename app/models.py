@@ -1,10 +1,20 @@
 from datetime import date
 
+from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
+from sqlalchemy import MetaData
+from werkzeug.security import check_password_hash, generate_password_hash
 
 from .competencia import competencia_esperada, meses_entre
 
-db = SQLAlchemy()
+# Nomes previsíveis para constraints — necessários para alterá-las em migrações futuras.
+db = SQLAlchemy(metadata=MetaData(naming_convention={
+    "ix": "ix_%(column_0_label)s",
+    "uq": "uq_%(table_name)s_%(column_0_N_name)s",
+    "ck": "ck_%(table_name)s_%(constraint_name)s",
+    "fk": "fk_%(table_name)s_%(column_0_name)s_%(referred_table_name)s",
+    "pk": "pk_%(table_name)s",
+}))
 
 PERIODICIDADES = {
     "mensal": "Mensal",
@@ -245,3 +255,29 @@ class Entrega(db.Model):
     responsavel = db.relationship("Responsavel")
 
     __table_args__ = (db.UniqueConstraint("empresa_id", "obrigacao_id", "competencia"),)
+
+
+class Usuario(UserMixin, db.Model):
+    """Quem acessa o sistema. Pode estar ligado a um Responsável ("minhas empresas")."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)  # usado como login
+    senha_hash = db.Column(db.String(255), nullable=False)
+    admin = db.Column(db.Boolean, default=False, nullable=False)
+    ativo = db.Column(db.Boolean, default=True, nullable=False)
+    responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
+
+    responsavel = db.relationship("Responsavel")
+
+    SENHA_MINIMA = 8
+
+    @property
+    def is_active(self):
+        return self.ativo
+
+    def definir_senha(self, senha):
+        self.senha_hash = generate_password_hash(senha)
+
+    def confere_senha(self, senha):
+        return check_password_hash(self.senha_hash, senha)

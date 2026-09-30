@@ -2,7 +2,7 @@
 {% block title %}Responsável{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">{{ 'Editar responsável' if resp.id else 'Novo responsável' }}</h1>
-<form method="post" class="card card-body" style="max-width: 640px">
+<form method="post" class="card card-body" style="max-width: 640px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3"><label class="form-label">Nome *</label><input class="form-control" name="nome" value="{{ resp.nome or '' }}" required></div>
   <div class="mb-3"><label class="form-label">E-mail</label><input type="email" class="form-control" name="email" value="{{ resp.email or '' }}"></div>
   <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if resp.ativo }}><label class="form-check-label" for="ativo">Ativo</label></div>

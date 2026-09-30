@@ -2,7 +2,7 @@
 {% block title %}{{ 'Editar' if empresa.id else 'Nova' }} empresa{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">{{ 'Editar empresa' if empresa.id else 'Nova empresa' }}</h1>
-<form method="post" class="card card-body">
+<form method="post" class="card card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <h2 class="h6 text-uppercase text-muted">Identificação</h2>
   <div class="row g-3 mb-4">
     <div class="col-md-6"><label class="form-label">Razão social *</label><input class="form-control" name="razao_social" value="{{ empresa.razao_social or '' }}" required></div>
@@ -37,7 +37,7 @@
         <option value="">— sem responsável —</option>
         {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if c and c.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
       </select>
-      <div class="form-text"><a href="{{ url_for('main.responsavel_form') }}" target="_blank">Cadastrar responsável</a></div>
+      {% if current_user.admin %}<div class="form-text"><a href="{{ url_for('main.responsavel_form') }}" target="_blank">Cadastrar responsável</a></div>{% endif %}
     </div>
     <div class="col-md-4">
       <label class="form-label">{{ m.rotulo_controle }} (competência)</label>

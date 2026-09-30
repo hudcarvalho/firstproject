@@ -27,7 +27,7 @@
     <div class="small text-muted">{{ modulo.rotulo_controle }}</div>
     <div class="d-flex flex-wrap align-items-center gap-3">
       <div class="fs-5 fw-semibold">{{ (controle.concluido_ate if controle) | competencia }} {{ badge_atraso(atraso) }}</div>
-      <form method="post" action="{{ url_for('main.empresa_controle', id=empresa.id, modulo=modulo.codigo) }}" class="d-flex gap-2 ms-auto">
+      <form method="post" action="{{ url_for('main.empresa_controle', id=empresa.id, modulo=modulo.codigo) }}" class="d-flex gap-2 ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="month" class="form-control form-control-sm" name="concluido_ate" value="{{ (controle.concluido_ate if controle) | input_competencia }}" required>
         <button class="btn btn-sm btn-primary text-nowrap">Atualizar</button>
       </form>
@@ -68,7 +68,7 @@
     <div class="card mb-4">
       <div class="card-header"><strong>Registrar cumprimento de obrigação</strong></div>
       <div class="card-body">
-        <form method="post" action="{{ url_for('main.entrega_nova', id=empresa.id, modulo=modulo.codigo) }}" class="row g-2">
+        <form method="post" action="{{ url_for('main.entrega_nova', id=empresa.id, modulo=modulo.codigo) }}" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="col-md-4"><label class="form-label small">Obrigação</label>
             <select class="form-select" name="obrigacao_id" required>
               {% for o in obrigacoes_aplicaveis %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
@@ -96,7 +96,7 @@
           <tr>
             <td>{{ en.competencia | competencia }}</td><td>{{ en.obrigacao.nome }}</td><td>{{ en.data_entrega | data_br }}</td>
             <td>{{ en.responsavel.nome if en.responsavel else '—' }}</td><td class="small">{{ en.observacao or '' }}</td>
-            <td class="text-end"><form method="post" action="{{ url_for('main.entrega_remover', id=en.id) }}" onsubmit="return confirm('Remover este registro?')"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form></td>
+            <td class="text-end"><form method="post" action="{{ url_for('main.entrega_remover', id=en.id) }}" onsubmit="return confirm('Remover este registro?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form></td>
           </tr>
         {% else %}
           <tr><td colspan="6" class="text-center text-muted py-3">Nenhum registro ainda.</td></tr>
@@ -116,21 +116,21 @@
           {% for a in ajustes %}
             <li class="list-group-item d-flex justify-content-between align-items-center">
               <span><span class="badge {{ 'text-bg-info' if a.tipo == 'incluir' else 'text-bg-secondary' }}">{{ 'Inclui' if a.tipo == 'incluir' else 'Dispensa' }}</span> {{ a.obrigacao.nome }}</span>
-              <form method="post" action="{{ url_for('main.empresa_ajuste_remover', id=empresa.id, ajuste_id=a.id) }}"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form>
+              <form method="post" action="{{ url_for('main.empresa_ajuste_remover', id=empresa.id, ajuste_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form>
             </li>
           {% else %}
             <li class="list-group-item text-muted small">Nenhuma exceção.</li>
           {% endfor %}
         </ul>
         {% if podem_incluir %}
-        <form method="post" action="{{ url_for('main.empresa_ajuste_novo', id=empresa.id, modulo=modulo.codigo) }}" class="input-group mb-2">
+        <form method="post" action="{{ url_for('main.empresa_ajuste_novo', id=empresa.id, modulo=modulo.codigo) }}" class="input-group mb-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="tipo" value="incluir">
           <select class="form-select" name="obrigacao_id">{% for o in podem_incluir %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}</select>
           <button class="btn btn-outline-info">Incluir</button>
         </form>
         {% endif %}
         {% if podem_excluir %}
-        <form method="post" action="{{ url_for('main.empresa_ajuste_novo', id=empresa.id, modulo=modulo.codigo) }}" class="input-group">
+        <form method="post" action="{{ url_for('main.empresa_ajuste_novo', id=empresa.id, modulo=modulo.codigo) }}" class="input-group"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <input type="hidden" name="tipo" value="excluir">
           <select class="form-select" name="obrigacao_id">{% for o in podem_excluir %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}</select>
           <button class="btn btn-outline-secondary">Dispensar</button>

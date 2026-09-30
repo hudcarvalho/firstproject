@@ -11,6 +11,7 @@
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
   <div class="container-fluid">
     <a class="navbar-brand" href="{{ url_for('main.inicio') }}">Controle de Rotina</a>
+    {% if current_user.is_authenticated %}
     <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav"><span class="navbar-toggler-icon"></span></button>
     <div class="collapse navbar-collapse" id="nav">
       {% set ep = request.endpoint or '' %}
@@ -21,6 +22,7 @@
           <a class="nav-link dropdown-toggle {{ 'active' if mod_atual == m.codigo }}" href="#" data-bs-toggle="dropdown">{{ m.nome }}</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo) }}">Painel</a></li>
+            {% if current_user.responsavel_id %}<li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo, responsavel=current_user.responsavel_id) }}">Minhas empresas</a></li>{% endif %}
             <li><hr class="dropdown-divider"></li>
             <li><h6 class="dropdown-header">Parametrização</h6></li>
             <li><a class="dropdown-item" href="{{ url_for('main.obrigacoes_lista', modulo=m.codigo) }}">Obrigações</a></li>
@@ -29,17 +31,30 @@
         </li>
         {% endfor %}
         <li class="nav-item"><a class="nav-link {{ 'active' if ep.startswith('main.empresa') and not mod_atual }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
+        {% if current_user.admin %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
+          <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('main.regimes_lista') }}">Regimes tributários</a></li>
             <li><a class="dropdown-item" href="{{ url_for('main.responsaveis_lista') }}">Responsáveis</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('main.modulos_lista') }}">Módulos</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('auth.usuarios_lista') }}">Usuários</a></li>
+          </ul>
+        </li>
+        {% endif %}
+      </ul>
+      <ul class="navbar-nav ms-auto">
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">{{ current_user.nome }}</a>
+          <ul class="dropdown-menu dropdown-menu-end">
+            <li><a class="dropdown-item" href="{{ url_for('auth.minha_senha') }}">Alterar senha</a></li>
+            <li><form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="dropdown-item">Sair</button></form></li>
           </ul>
         </li>
       </ul>
     </div>
+    {% endif %}
   </div>
 </nav>
 <main class="container-fluid px-4 pb-5">

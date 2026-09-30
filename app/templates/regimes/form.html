@@ -2,7 +2,7 @@
 {% block title %}Regime tributário{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">{{ 'Editar regime' if regime.id else 'Novo regime' }}</h1>
-<form method="post" class="card card-body" style="max-width: 640px">
+<form method="post" class="card card-body" style="max-width: 640px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="mb-3"><label class="form-label">Nome *</label><input class="form-control" name="nome" value="{{ regime.nome or '' }}" required></div>
   <div class="mb-3"><label class="form-label">Descrição</label><input class="form-control" name="descricao" value="{{ regime.descricao or '' }}"></div>
   <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if regime.ativo }}><label class="form-check-label" for="ativo">Ativo (aparece no cadastro de clientes)</label></div>

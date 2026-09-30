@@ -2,7 +2,7 @@
 {% block title %}Obrigação{% endblock %}
 {% block content %}
 <h1 class="h3 mb-3">{{ 'Editar obrigação' if obrigacao.id else 'Nova obrigação' }} · {{ modulo.nome }}</h1>
-<form method="post" class="card card-body">
+<form method="post" class="card card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="row g-3">
     <div class="col-md-6"><label class="form-label">Nome *</label><input class="form-control" name="nome" value="{{ obrigacao.nome or '' }}" required></div>
     <div class="col-md-6"><label class="form-label">Descrição</label><input class="form-control" name="descricao" value="{{ obrigacao.descricao or '' }}"></div>
