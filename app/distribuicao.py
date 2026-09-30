@@ -6,7 +6,7 @@ from decimal import Decimal
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import or_
 
-from .competencia import cnpj_valido, cpf_valido, parse_valor, so_digitos
+from .competencia import cnpj_valido, cpf_valido, fmt_valor, parse_valor, so_digitos
 from .models import DistribuicaoLucro, Empresa, Socio, db
 
 bp = Blueprint("distribuicao", __name__, url_prefix="/distribuicao")
@@ -27,6 +27,30 @@ def _ano():
     except ValueError:
         return date.today().year
     return ano if 2000 <= ano <= 2100 else date.today().year
+
+
+def _percentual(texto):
+    """Percentual digitado ("33,33", "50", "12.5") -> Decimal entre 0 e 100, ou None se vazio.
+
+    Levanta ValueError se inválido.
+    """
+    valor = parse_valor((texto or "").replace("%", ""))
+    if valor is not None and not Decimal("0") <= valor <= Decimal("100"):
+        raise ValueError(texto)
+    return valor
+
+
+def _soma_quotas(empresa):
+    return sum((s.percentual or Decimal("0") for s in empresa.socios if s.ativo), Decimal("0"))
+
+
+def _avisar_soma(empresa):
+    ativos = [s for s in empresa.socios if s.ativo]
+    if ativos and all(s.percentual is not None for s in ativos):
+        soma = _soma_quotas(empresa)
+        if soma != Decimal("100"):
+            flash(f"Atenção: as quotas dos sócios ativos somam {fmt_valor(soma)}% (e não 100%).",
+                  "warning")
 
 
 def _clientes_para_busca():
@@ -96,6 +120,7 @@ def empresa(id):
     return render_template(
         "distribuicao/empresa.html", empresa=empresa, ano=ano, meses=MESES, linhas=linhas,
         totais_mes=totais_mes, total_geral=total_geral, clientes=_clientes_para_busca(),
+        soma_quotas=_soma_quotas(empresa),
         valores_digitados=request.form if request.method == "POST" else None,
     )
 
@@ -144,6 +169,11 @@ def socio_novo(id):
     ano = _ano()
     nome = " ".join((request.form.get("nome") or "").split())
     documento = so_digitos(request.form.get("documento"))
+    try:
+        percentual = _percentual(request.form.get("percentual"))
+    except ValueError:
+        flash("Quotas: informe um percentual entre 0 e 100.", "danger")
+        return redirect(url_for("distribuicao.empresa", id=id, ano=ano))
     if not nome:
         flash("Informe o nome do sócio.", "danger")
     elif not (cpf_valido(documento) or cnpj_valido(documento)):
@@ -151,10 +181,41 @@ def socio_novo(id):
     elif Socio.query.filter_by(empresa_id=id, documento=documento).first():
         flash("Já existe um sócio com esse CPF/CNPJ nesta empresa.", "warning")
     else:
-        db.session.add(Socio(empresa=empresa, nome=nome, documento=documento, ativo=True))
+        db.session.add(Socio(empresa=empresa, nome=nome, documento=documento,
+                             percentual=percentual, ativo=True))
         db.session.commit()
         flash(f"Sócio {nome} cadastrado.", "success")
+        _avisar_soma(empresa)
     return redirect(url_for("distribuicao.empresa", id=id, ano=ano))
+
+
+@bp.post("/<int:id>/quotas")
+def quotas(id):
+    """Grava o % de quotas de cada sócio (campos pct-<socio_id>)."""
+    empresa = _empresa(id)
+    socios = {s.id: s for s in empresa.socios}
+    novos, erros = {}, []
+    for chave, texto in request.form.items():
+        if not chave.startswith("pct-"):
+            continue
+        try:
+            socio = socios[int(chave[4:])]
+        except (ValueError, KeyError):
+            continue
+        try:
+            novos[socio] = _percentual(texto)
+        except ValueError:
+            erros.append(f"{socio.nome}: “{texto}” não é um percentual entre 0 e 100.")
+    if erros:
+        for e in erros:
+            flash(e, "danger")
+    else:
+        for socio, valor in novos.items():
+            socio.percentual = valor
+        db.session.commit()
+        flash("Quotas salvas.", "success")
+        _avisar_soma(empresa)
+    return redirect(url_for("distribuicao.empresa", id=id, ano=_ano()))
 
 
 @bp.post("/socios/<int:socio_id>/situacao")

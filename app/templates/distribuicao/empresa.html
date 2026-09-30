@@ -19,18 +19,23 @@
   </div>
   <div class="collapse" id="novo-socio">
     <form method="post" action="{{ url_for('distribuicao.socio_novo', id=empresa.id, ano=ano) }}" class="row g-2 p-3 border-bottom bg-light"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-      <div class="col-md-6"><label class="form-label small">Nome *</label><input class="form-control" name="nome" required></div>
-      <div class="col-md-4"><label class="form-label small">CPF / CNPJ *</label><input class="form-control" name="documento" id="documento-socio" required placeholder="000.000.000-00"></div>
+      <div class="col-md-5"><label class="form-label small">Nome *</label><input class="form-control" name="nome" required></div>
+      <div class="col-md-3"><label class="form-label small">CPF / CNPJ *</label><input class="form-control" name="documento" id="documento-socio" required placeholder="000.000.000-00"></div>
+      <div class="col-md-2"><label class="form-label small">Quotas (%)</label><input class="form-control text-end" name="percentual" inputmode="decimal" placeholder="0,00"></div>
       <div class="col-md-2 d-flex align-items-end"><button class="btn btn-success w-100">Cadastrar</button></div>
     </form>
   </div>
   <table class="table align-middle mb-0">
-    <thead class="table-light"><tr><th>Nome</th><th>CPF / CNPJ</th><th>Situação</th><th></th></tr></thead>
+    <thead class="table-light"><tr><th>Nome</th><th>CPF / CNPJ</th><th class="text-end" style="width: 150px">Quotas (%)</th><th>Situação</th><th></th></tr></thead>
     <tbody>
     {% for s in empresa.socios %}
       <tr class="{{ 'text-muted' if not s.ativo }}">
         <td>{{ s.nome }}</td>
         <td class="text-nowrap">{{ s.documento | documento }} <span class="small text-muted">{{ s.tipo_documento }}</span></td>
+        <td><div class="input-group input-group-sm">
+          <input class="form-control text-end pct" name="pct-{{ s.id }}" form="form-quotas" inputmode="decimal"
+                 value="{{ s.percentual | valor }}" placeholder="0,00" data-ativo="{{ 1 if s.ativo else 0 }}">
+          <span class="input-group-text">%</span></div></td>
         <td>{% if s.ativo %}<span class="badge text-bg-success">Ativo</span>{% else %}<span class="badge text-bg-secondary">Inativo</span>{% endif %}</td>
         <td class="text-end">
           <form method="post" action="{{ url_for('distribuicao.socio_situacao', socio_id=s.id, ano=ano) }}"
@@ -40,9 +45,19 @@
         </td>
       </tr>
     {% else %}
-      <tr><td colspan="4" class="text-center text-muted py-3">Nenhum sócio cadastrado. Use “+ Novo sócio”.</td></tr>
+      <tr><td colspan="5" class="text-center text-muted py-3">Nenhum sócio cadastrado. Use “+ Novo sócio”.</td></tr>
     {% endfor %}
     </tbody>
+    {% if empresa.socios %}
+    <tfoot class="table-light">
+      <tr><td colspan="2" class="text-end fw-semibold">Total dos sócios ativos</td>
+        <td class="text-end fw-semibold text-nowrap"><span id="soma-quotas">{{ soma_quotas | valor }}</span>%
+          <span id="aviso-quotas" class="badge text-bg-warning ms-1 {{ 'd-none' if soma_quotas == 100 }}">≠ 100%</span></td>
+        <td colspan="2" class="text-end">
+          <form method="post" action="{{ url_for('distribuicao.quotas', id=empresa.id, ano=ano) }}" id="form-quotas"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-primary">Salvar quotas</button></form></td></tr>
+    </tfoot>
+    {% endif %}
   </table>
 </div>
 
@@ -101,6 +116,20 @@
     this.value = d.length <= 11
       ? d.replace(/^(\d{3})(\d)/, '$1.$2').replace(/^(\d{3})\.(\d{3})(\d)/, '$1.$2.$3').replace(/\.(\d{3})(\d{1,2})$/, '.$1-$2')
       : d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+  });
+
+  // Soma das quotas dos sócios ativos enquanto digita
+  const pcts = Array.from(document.querySelectorAll('input.pct'));
+  const somaQuotas = document.getElementById('soma-quotas');
+  const avisoQuotas = document.getElementById('aviso-quotas');
+  function recalcularQuotas() {
+    const soma = pcts.filter(i => i.dataset.ativo === '1').reduce((t, i) => t + paraNumero(i.value), 0);
+    somaQuotas.textContent = formatar(soma);
+    avisoQuotas.classList.toggle('d-none', Math.abs(soma - 100) < 0.005);
+  }
+  pcts.forEach(i => {
+    i.addEventListener('input', recalcularQuotas);
+    i.addEventListener('blur', () => { if (i.value.trim()) i.value = formatar(paraNumero(i.value.replace('%', ''))); });
   });
 
   // Totais recalculados enquanto digita
