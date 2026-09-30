@@ -116,6 +116,38 @@ Para desenvolvimento, `python run.py` sobe em modo debug em http://127.0.0.1:500
 
 ## Hospedar na internet
 
+### Grátis: PythonAnywhere
+
+O plano gratuito (Beginner) do [PythonAnywhere](https://www.pythonanywhere.com) roda o
+sistema com os dados guardados no próprio servidor. Limitações: o site precisa ser
+**renovado uma vez por mês** (um clique na aba *Web*), o endereço é
+`https://SEUUSUARIO.pythonanywhere.com` e há 512 MB de espaço (o sistema usa ~75 MB).
+
+1. Crie a conta **Beginner** em pythonanywhere.com.
+2. Na aba **Web**: *Add a new web app → Next → Manual configuration → Python 3.13*
+   (ou a versão mais nova oferecida) → *Next*.
+3. Na aba **Consoles**, abra um **Bash** e rode:
+
+   ```bash
+   git clone https://github.com/hudcarvalho/firstproject.git
+   cd firstproject
+   bash deploy/pythonanywhere_setup.sh
+   ```
+
+   O script instala tudo, pede os dados do **administrador** (criado antes de o site ir ao
+   ar) e configura o arquivo WSGI. No fim ele mostra os valores para conferir na aba Web.
+4. Na aba **Web**, preencha **Virtualenv** e **Static files** como o script indicou, ligue
+   **Force HTTPS** e clique em **Reload**.
+5. Acesse `https://SEUUSUARIO.pythonanywhere.com` e entre com o administrador.
+
+**Manutenção**
+- Todo mês: aba *Web* → botão para estender o prazo do site.
+- Backup: aba *Files* → baixe `firstproject/instance/controle.db`.
+- Atualizar o sistema: no console Bash, `cd firstproject && git pull && bash deploy/pythonanywhere_setup.sh`,
+  depois **Reload** na aba *Web*.
+
+### Pago: Render
+
 O repositório já traz o arquivo `render.yaml` para o [Render](https://render.com):
 
 1. Crie uma conta no Render e conecte o GitHub.
