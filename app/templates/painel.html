@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_atraso %}
+{% block title %}Painel {{ modulo.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Painel · {{ modulo.nome }}</h1>
+  <a class="btn btn-primary" href="{{ url_for('main.empresa_nova') }}">+ Nova empresa</a>
+</div>
+
+<form class="row g-2 mb-3" method="get">
+  <div class="col-md-4"><input class="form-control" name="q" value="{{ filtros.q }}" placeholder="Buscar por nome ou CNPJ"></div>
+  <div class="col-md-3">
+    <select class="form-select" name="responsavel">
+      <option value="">Todos os responsáveis</option>
+      <option value="0" {{ 'selected' if filtros.responsavel == '0' }}>— sem responsável —</option>
+      {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if filtros.responsavel == r.id|string }}>{{ r.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-3">
+    <select class="form-select" name="regime">
+      <option value="">Todas as tributações</option>
+      {% for r in regimes %}<option value="{{ r.id }}" {{ 'selected' if filtros.regime == r.id }}>{{ r.nome }}</option>{% endfor %}
+    </select>
+  </div>
+  <div class="col-md-2 d-grid"><button class="btn btn-outline-secondary">Filtrar</button></div>
+</form>
+
+<div class="card">
+  <div class="table-responsive">
+    <table class="table table-hover align-middle mb-0">
+      <thead class="table-light">
+        <tr><th>Empresa</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>{{ modulo.rotulo_controle }}</th><th>Obrigações</th></tr>
+      </thead>
+      <tbody>
+      {% for l in linhas %}{% set e = l.empresa %}{% set link = url_for('main.empresa_modulo', id=e.id, modulo=modulo.codigo) %}
+        <tr class="linha-link" onclick="location.href='{{ link }}'">
+          <td><a href="{{ link }}" class="fw-semibold text-decoration-none">{{ e.nome_exibicao }}</a>
+            {% if e.nome_fantasia %}<div class="small text-muted">{{ e.razao_social }}</div>{% endif %}</td>
+          <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
+          <td>{{ e.regime.nome }}</td>
+          <td>{{ l.controle.responsavel.nome if l.controle and l.controle.responsavel else '—' }}</td>
+          <td class="text-nowrap">{{ (l.controle.concluido_ate if l.controle) | competencia }} {{ badge_atraso(l.atraso) }}</td>
+          <td class="text-nowrap">
+            {% if l.pendentes %}<span class="badge text-bg-danger">{{ l.pendentes }} pendente{{ 's' if l.pendentes > 1 }}</span>
+            {% else %}<span class="badge text-bg-success">em dia</span>{% endif %}
+            <span class="small text-muted">de {{ l.total }}</span>
+          </td>
+        </tr>
+      {% else %}
+        <tr><td colspan="6" class="text-center text-muted py-4">Nenhuma empresa encontrada. <a href="{{ url_for('main.empresa_nova') }}">Cadastrar empresa</a></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}

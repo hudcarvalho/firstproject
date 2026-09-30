@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_ativo %}
+{% block title %}Obrigações · {{ modulo.nome }}{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Obrigações · {{ modulo.nome }}</h1>
+  <div>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.matriz', modulo=modulo.codigo) }}">Obrigações × Tributação</a>
+    {% if current_user.admin %}<a class="btn btn-primary" href="{{ url_for('main.obrigacao_form', modulo=modulo.codigo) }}">+ Nova obrigação</a>{% endif %}
+  </div>
+</div>
+<div class="card"><div class="table-responsive">
+<table class="table table-hover align-middle mb-0">
+  <thead class="table-light"><tr><th>Nome</th><th>Periodicidade</th><th>Esfera</th><th>Venc.</th><th>Tributações</th><th>Situação</th><th></th></tr></thead>
+  <tbody>
+  {% for o in obrigacoes %}
+    <tr>
+      <td>{{ o.nome }}{% if o.descricao %}<div class="small text-muted">{{ o.descricao }}</div>{% endif %}</td>
+      <td>{{ o.periodicidade_label }}</td><td>{{ o.esfera_label }}</td>
+      <td class="text-nowrap">{{ 'dia ' ~ o.dia_vencimento if o.dia_vencimento else '—' }}</td>
+      <td>{% for r in o.regimes %}<span class="badge text-bg-light border me-1">{{ r.nome }}</span>{% else %}<span class="text-muted small">nenhuma</span>{% endfor %}</td>
+      <td>{{ badge_ativo(o.ativo) }}</td>
+      <td class="text-end">{% if current_user.admin %}<a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.obrigacao_form', modulo=modulo.codigo, id=o.id) }}">Editar</a>{% endif %}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="7" class="text-center text-muted py-4">Nenhuma obrigação cadastrada neste módulo.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% endblock %}

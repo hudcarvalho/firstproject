@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% from "_macros.html" import badge_ativo %}
+{% block title %}Módulos{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Módulos</h1>
+<p class="text-muted">Cada módulo tem suas próprias obrigações, responsável por empresa e controle de andamento. Módulos inativos ficam ocultos no sistema; as obrigações já cadastradas neles são mantidas para quando forem ativados.</p>
+<div class="card"><table class="table table-hover align-middle mb-0">
+  <thead class="table-light"><tr><th>Módulo</th><th>Controle de andamento</th><th>Obrigações</th><th>Situação</th><th></th></tr></thead>
+  <tbody>
+  {% for m in modulos %}
+    <tr><td>{{ m.nome }}</td><td>{{ m.rotulo_controle }}</td><td>{{ m.obrigacoes | length }}</td><td>{{ badge_ativo(m.ativo) }}</td>
+      <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.modulo_form', id=m.id) }}">Editar</a></td></tr>
+  {% endfor %}
+  </tbody>
+</table></div>
+{% endblock %}

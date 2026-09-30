@@ -1,0 +1,13 @@
+{% extends "auth/_layout.html" %}
+{% block title %}Primeiro acesso{% endblock %}
+{% block cartao %}
+<h1 class="h4 mb-1">Primeiro acesso</h1>
+<p class="text-muted small">Crie o usuário administrador do sistema. Depois ele poderá cadastrar os demais usuários.</p>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3"><label class="form-label">Nome</label><input class="form-control" name="nome" value="{{ form.get('nome', '') }}" required autofocus></div>
+  <div class="mb-3"><label class="form-label">E-mail (login)</label><input type="email" class="form-control" name="email" value="{{ form.get('email', '') }}" required autocomplete="username"></div>
+  <div class="mb-3"><label class="form-label">Senha</label><input type="password" class="form-control" name="senha" required minlength="8" autocomplete="new-password"><div class="form-text">Mínimo de 8 caracteres.</div></div>
+  <div class="mb-3"><label class="form-label">Confirme a senha</label><input type="password" class="form-control" name="confirmacao" required autocomplete="new-password"></div>
+  <button class="btn btn-primary w-100">Criar administrador</button>
+</form>
+{% endblock %}

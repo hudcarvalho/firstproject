@@ -1,0 +1,11 @@
+{% extends "auth/_layout.html" %}
+{% block title %}Alterar senha{% endblock %}
+{% block cartao %}
+<h1 class="h4 mb-3">Alterar minha senha</h1>
+<form method="post"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="mb-3"><label class="form-label">Senha atual</label><input type="password" class="form-control" name="atual" required autocomplete="current-password"></div>
+  <div class="mb-3"><label class="form-label">Nova senha</label><input type="password" class="form-control" name="nova" required minlength="8" autocomplete="new-password"></div>
+  <div class="mb-3"><label class="form-label">Confirme a nova senha</label><input type="password" class="form-control" name="confirmacao" required autocomplete="new-password"></div>
+  <div class="d-flex gap-2"><button class="btn btn-primary">Salvar</button><a class="btn btn-outline-secondary" href="{{ url_for('main.inicio') }}">Cancelar</a></div>
+</form>
+{% endblock %}

@@ -1,0 +1,18 @@
+{% macro badge_atraso(atraso) -%}
+  {%- if atraso is none -%}<span class="badge text-bg-secondary">sem informação</span>
+  {%- elif atraso == 0 -%}<span class="badge text-bg-success">em dia</span>
+  {%- elif atraso <= 2 -%}<span class="badge text-bg-warning">{{ atraso }} {{ 'mês' if atraso == 1 else 'meses' }} atrás</span>
+  {%- else -%}<span class="badge text-bg-danger">{{ atraso }} meses atrás</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro badge_status(status) -%}
+  {%- if status == 'em_dia' -%}<span class="badge text-bg-success">Em dia</span>
+  {%- elif status == 'pendente' -%}<span class="badge text-bg-danger">Pendente</span>
+  {%- else -%}<span class="badge text-bg-secondary">Eventual</span>
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro badge_ativo(ativo) -%}
+  {%- if ativo -%}<span class="badge text-bg-success">Ativo</span>{%- else -%}<span class="badge text-bg-secondary">Inativo</span>{%- endif -%}
+{%- endmacro %}

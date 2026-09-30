@@ -1,0 +1,67 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Editar' if empresa.id else 'Nova' }} empresa{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">{{ 'Editar empresa' if empresa.id else 'Nova empresa' }}</h1>
+<form method="post" class="card card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <h2 class="h6 text-uppercase text-muted">Identificação</h2>
+  <div class="row g-3 mb-4">
+    <div class="col-md-6"><label class="form-label">Razão social *</label><input class="form-control" name="razao_social" value="{{ empresa.razao_social or '' }}" required></div>
+    <div class="col-md-6"><label class="form-label">Nome fantasia</label><input class="form-control" name="nome_fantasia" value="{{ empresa.nome_fantasia or '' }}"></div>
+    <div class="col-md-4"><label class="form-label">CNPJ *</label><input class="form-control" name="cnpj" id="cnpj" value="{{ empresa.cnpj_formatado if empresa.cnpj else '' }}" placeholder="00.000.000/0000-00" required></div>
+    <div class="col-md-4"><label class="form-label">Inscrição estadual</label><input class="form-control" name="inscricao_estadual" value="{{ empresa.inscricao_estadual or '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Inscrição municipal</label><input class="form-control" name="inscricao_municipal" value="{{ empresa.inscricao_municipal or '' }}"></div>
+    <div class="col-md-6"><label class="form-label">E-mail</label><input type="email" class="form-control" name="email" value="{{ empresa.email or '' }}"></div>
+    <div class="col-md-6"><label class="form-label">Telefone</label><input class="form-control" name="telefone" value="{{ empresa.telefone or '' }}"></div>
+  </div>
+
+  <h2 class="h6 text-uppercase text-muted">Tributação</h2>
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <label class="form-label">Tributação *</label>
+      <select class="form-select" name="regime_id" required>
+        <option value="">Selecione…</option>
+        {% for r in regimes %}<option value="{{ r.id }}" {{ 'selected' if empresa.regime_id == r.id or (empresa.regime and empresa.regime.id == r.id) }}>{{ r.nome }}</option>{% endfor %}
+      </select>
+      <div class="form-text">Define as obrigações padrão da empresa em cada módulo.</div>
+    </div>
+    <div class="col-md-8"><label class="form-label">Observações</label><textarea class="form-control" name="observacoes" rows="2">{{ empresa.observacoes or '' }}</textarea></div>
+    <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if empresa.ativo }}><label class="form-check-label" for="ativo">Empresa ativa</label></div>
+  </div>
+
+  {% for m in modulos %}{% set c = empresa.controle(m) %}
+  <h2 class="h6 text-uppercase text-muted">Rotina · {{ m.nome }}</h2>
+  <div class="row g-3 mb-4">
+    <div class="col-md-4">
+      <label class="form-label">Responsável</label>
+      <select class="form-select" name="responsavel_{{ m.codigo }}">
+        <option value="">— sem responsável —</option>
+        {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if c and c.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
+      </select>
+      {% if current_user.admin %}<div class="form-text"><a href="{{ url_for('main.responsavel_form') }}" target="_blank">Cadastrar responsável</a></div>{% endif %}
+    </div>
+    <div class="col-md-4">
+      <label class="form-label">{{ m.rotulo_controle }} (competência)</label>
+      <input type="month" class="form-control" name="concluido_{{ m.codigo }}" value="{{ (c.concluido_ate if c) | input_competencia }}">
+    </div>
+  </div>
+  {% endfor %}
+
+  <div class="d-flex gap-2">
+    <button class="btn btn-primary">Salvar</button>
+    <a class="btn btn-outline-secondary" href="{{ url_for('main.empresa_detalhe', id=empresa.id) if empresa.id else url_for('main.empresas_lista') }}">Cancelar</a>
+  </div>
+</form>
+{% endblock %}
+{% block scripts %}
+<script>
+document.getElementById('cnpj').addEventListener('input', function () {
+  const d = this.value.replace(/\D/g, '').slice(0, 14);
+  let v = d;
+  if (d.length > 12) v = d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+  else if (d.length > 8) v = d.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, '$1.$2.$3/$4');
+  else if (d.length > 5) v = d.replace(/^(\d{2})(\d{3})(\d{0,3})/, '$1.$2.$3');
+  else if (d.length > 2) v = d.replace(/^(\d{2})(\d{0,3})/, '$1.$2');
+  this.value = v;
+});
+</script>
+{% endblock %}

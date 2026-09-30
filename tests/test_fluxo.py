@@ -1,0 +1,209 @@
+from datetime import date
+
+from app.competencia import competencia_esperada
+from app.models import Empresa, Modulo, Obrigacao, RegimeTributario, Responsavel, db
+
+CNPJ = "11.222.333/0001-81"
+
+
+def _regime(nome):
+    return RegimeTributario.query.filter_by(nome=nome).one()
+
+
+def _modulo(codigo):
+    return Modulo.query.filter_by(codigo=codigo).one()
+
+
+def _cadastrar(client, app, regime="Lucro Presumido"):
+    with app.app_context():
+        db.session.add(Responsavel(nome="Ana"))
+        db.session.commit()
+        rid, respid = _regime(regime).id, Responsavel.query.one().id
+    resp = client.post("/empresas/nova", data={
+        "razao_social": "ACME Ltda", "cnpj": CNPJ, "regime_id": rid,
+        "responsavel_contabil": respid, "concluido_contabil": "2026-06", "ativo": "on",
+    })
+    assert resp.status_code == 302
+    with app.app_context():
+        return Empresa.query.one().id
+
+
+def _ativar(app, codigo):
+    with app.app_context():
+        _modulo(codigo).ativo = True
+        db.session.commit()
+
+
+def test_modulos_iniciais(app):
+    with app.app_context():
+        assert [m.codigo for m in Modulo.ativos()] == ["contabil"]
+        assert {m.codigo for m in Modulo.query} == {"contabil", "fiscal", "dp", "paralegal"}
+
+
+def test_paginas(client, app):
+    eid = _cadastrar(client, app)
+    for url in ["/contabil/", "/empresas", "/empresas/nova", f"/empresas/{eid}/editar",
+                f"/empresas/{eid}/contabil", "/contabil/obrigacoes", "/contabil/obrigacoes/nova",
+                "/contabil/matriz", "/regimes", "/regimes/novo", "/responsaveis",
+                "/responsaveis/novo", "/modulos", "/modulos/1/editar"]:
+        assert client.get(url).status_code == 200, url
+    assert client.get("/").headers["Location"].endswith("/contabil/")
+
+
+def test_modulo_inativo_fica_oculto(client, app):
+    eid = _cadastrar(client, app)
+    assert client.get("/fiscal/").status_code == 404
+    assert client.get(f"/empresas/{eid}/fiscal").status_code == 404
+    assert "PIS/COFINS" not in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+
+
+def test_cadastro_empresa_e_obrigacoes_do_regime(client, app):
+    eid = _cadastrar(client, app)
+    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert "ACME Ltda" in html and "11.222.333/0001-81" in html
+    assert "Escriturada até" in html
+    with app.app_context():
+        e = db.session.get(Empresa, eid)
+        nomes = {o.nome for o in e.obrigacoes_aplicaveis(_modulo("contabil"))}
+        assert {"Distribuição de Lucros", "IRPJ", "CSLL", "ECD", "ECF"} <= nomes
+        assert "DEFIS" not in nomes  # do Simples, não do Presumido
+        assert "PIS/COFINS" not in nomes  # do módulo Fiscal
+        c = e.controle(_modulo("contabil"))
+        assert c.concluido_ate == date(2026, 6, 1)
+        assert c.responsavel.nome == "Ana"
+
+
+def test_ativar_modulo_fiscal(client, app):
+    eid = _cadastrar(client, app)
+    _ativar(app, "fiscal")
+    html = client.get(f"/empresas/{eid}/fiscal").get_data(as_text=True)
+    assert "PIS/COFINS" in html and "Apurado até" in html
+    assert client.get("/fiscal/").status_code == 200
+    # responsável próprio por módulo
+    with app.app_context():
+        db.session.add(Responsavel(nome="Bia"))
+        db.session.commit()
+        ana, bia = (Responsavel.query.filter_by(nome=n).one().id for n in ("Ana", "Bia"))
+        rid = _regime("Lucro Presumido").id
+    client.post(f"/empresas/{eid}/editar", data={
+        "razao_social": "ACME Ltda", "cnpj": CNPJ, "regime_id": rid, "ativo": "on",
+        "responsavel_contabil": ana, "responsavel_fiscal": bia, "concluido_fiscal": "2026-07",
+    })
+    with app.app_context():
+        e = db.session.get(Empresa, eid)
+        assert e.controle(_modulo("contabil")).responsavel.nome == "Ana"
+        assert e.controle(_modulo("fiscal")).responsavel.nome == "Bia"
+        assert e.controle(_modulo("fiscal")).concluido_ate == date(2026, 7, 1)
+
+
+def test_cnpj_invalido_e_duplicado(client, app):
+    _cadastrar(client, app)
+    with app.app_context():
+        rid = _regime("Simples Nacional").id
+    r = client.post("/empresas/nova", data={"razao_social": "X", "cnpj": "123", "regime_id": rid})
+    assert "CNPJ inválido" in r.get_data(as_text=True)
+    r = client.post("/empresas/nova", data={"razao_social": "X", "cnpj": CNPJ, "regime_id": rid})
+    assert "já cadastrado" in r.get_data(as_text=True)
+    with app.app_context():
+        assert Empresa.query.count() == 1
+
+
+def test_edicao_invalida_nao_persiste(client, app):
+    eid = _cadastrar(client, app)
+    with app.app_context():
+        rid = _regime("Lucro Presumido").id
+    r = client.post(f"/empresas/{eid}/editar", data={"razao_social": "Nova", "cnpj": "1", "regime_id": rid})
+    assert r.status_code == 200
+    with app.app_context():
+        e = db.session.get(Empresa, eid)
+        assert e.razao_social == "ACME Ltda"
+        assert e.controle(_modulo("contabil")).responsavel is not None
+
+
+def _status(eid, obid):
+    e = db.session.get(Empresa, eid)
+    return next(s["status"] for s in e.situacao_obrigacoes(_modulo("contabil"))
+                if s["obrigacao"].id == obid)
+
+
+def test_entrega_deixa_obrigacao_em_dia(client, app):
+    eid = _cadastrar(client, app)
+    with app.app_context():
+        obid = Obrigacao.query.filter_by(nome="Distribuição de Lucros").one().id
+        esperada = competencia_esperada("mensal", date.today())
+        assert _status(eid, obid) == "pendente"
+    url = f"/empresas/{eid}/contabil/entregas"
+    client.post(url, data={"obrigacao_id": obid, "competencia": f"{esperada:%Y-%m}"})
+    with app.app_context():
+        assert _status(eid, obid) == "em_dia"
+    r = client.post(url, data={"obrigacao_id": obid, "competencia": f"{esperada:%Y-%m}"},
+                    follow_redirects=True)
+    assert "já estava registrada" in r.get_data(as_text=True)
+
+
+def test_entrega_de_obrigacao_de_outro_modulo_e_recusada(client, app):
+    eid = _cadastrar(client, app)
+    with app.app_context():
+        pis = Obrigacao.query.filter_by(nome="PIS/COFINS").one().id
+    r = client.post(f"/empresas/{eid}/contabil/entregas",
+                    data={"obrigacao_id": pis, "competencia": "2026-08"}, follow_redirects=True)
+    assert "Preencha obrigação" in r.get_data(as_text=True)
+
+
+def test_ajustes_por_empresa(client, app):
+    eid = _cadastrar(client, app)
+    with app.app_context():
+        defis = Obrigacao.query.filter_by(nome="DEFIS").one().id
+        irpj = Obrigacao.query.filter_by(nome="IRPJ").one().id
+    client.post(f"/empresas/{eid}/contabil/ajustes", data={"tipo": "incluir", "obrigacao_id": defis})
+    client.post(f"/empresas/{eid}/contabil/ajustes", data={"tipo": "excluir", "obrigacao_id": irpj})
+    with app.app_context():
+        nomes = {o.nome for o in db.session.get(Empresa, eid).obrigacoes_aplicaveis(_modulo("contabil"))}
+        assert "DEFIS" in nomes and "IRPJ" not in nomes
+
+
+def test_matriz_preserva_outros_modulos(client, app):
+    with app.app_context():
+        mei = _regime("MEI")
+        dist = Obrigacao.query.filter_by(nome="Distribuição de Lucros").one()
+        contabil = _modulo("contabil")
+        vinculos = [f"{r.id}-{o.id}" for r in RegimeTributario.query
+                    for o in r.obrigacoes if o.modulo_id == contabil.id]
+        vinculos.append(f"{mei.id}-{dist.id}")
+        mei_id = mei.id
+        fiscais_antes = sum(len(r.obrigacoes_do_modulo(_modulo("fiscal"))) for r in RegimeTributario.query)
+    client.post("/contabil/matriz", data={"vinculo": vinculos})
+    with app.app_context():
+        nomes_mei = {o.nome for o in db.session.get(RegimeTributario, mei_id).obrigacoes}
+        assert "Distribuição de Lucros" in nomes_mei and "DAS-MEI" in nomes_mei
+        fiscais_depois = sum(len(r.obrigacoes_do_modulo(_modulo("fiscal"))) for r in RegimeTributario.query)
+        assert fiscais_antes == fiscais_depois
+
+
+def test_nova_obrigacao_no_modulo(client, app):
+    with app.app_context():
+        rid = _regime("Lucro Real").id
+    client.post("/contabil/obrigacoes/nova", data={
+        "nome": "Balancete mensal", "periodicidade": "mensal", "esfera": "interna",
+        "regimes": [rid], "ativo": "on",
+    })
+    with app.app_context():
+        ob = Obrigacao.query.filter_by(nome="Balancete mensal").one()
+        assert ob.modulo.codigo == "contabil"
+        assert [r.nome for r in ob.regimes] == ["Lucro Real"]
+
+
+def test_atualizar_escrituracao(client, app):
+    eid = _cadastrar(client, app)
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "2026-08"})
+    with app.app_context():
+        c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
+        assert c.concluido_ate == date(2026, 8, 1)
+        assert c.meses_atrasados(date(2026, 9, 30)) == 0
+        assert c.meses_atrasados(date(2026, 12, 5)) == 3
+
+
+def test_filtro_sem_responsavel(client, app):
+    _cadastrar(client, app)
+    html = client.get("/contabil/?responsavel=0").get_data(as_text=True)
+    assert "ACME Ltda" not in html
