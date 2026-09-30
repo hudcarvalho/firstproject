@@ -207,3 +207,19 @@ def test_filtro_sem_responsavel(client, app):
     _cadastrar(client, app)
     html = client.get("/contabil/?responsavel=0").get_data(as_text=True)
     assert "ACME Ltda" not in html
+
+
+def test_lista_clientes_tem_dados_para_filtros(client, app):
+    eid = _cadastrar(client, app)
+    with app.app_context():
+        e = db.session.get(Empresa, eid)
+        e.ativo = False
+        db.session.commit()
+        resp_id = e.controle(_modulo("contabil")).responsavel_id
+        regime_id = e.regime_id
+    html = client.get("/empresas").get_data(as_text=True)
+    # empresas inativas também vêm na página (o filtro Situação decide se aparecem)
+    assert "ACME Ltda" in html and 'data-situacao="inativa"' in html
+    assert f'data-respcontabil="{resp_id}"' in html and f'data-regime="{regime_id}"' in html
+    assert 'id="f-resp-contabil"' in html and 'id="f-regime"' in html and 'id="f-situacao"' in html
+    assert '<option value="todas" selected>' in client.get("/empresas?inativas=1").get_data(as_text=True)

@@ -117,13 +117,20 @@ def painel(modulo):
 
 @bp.route("/empresas")
 def empresas_lista():
-    mostrar_inativas = request.args.get("inativas") == "1"
-    q = Empresa.query
-    if not mostrar_inativas:
-        q = q.filter_by(ativo=True)
+    # Todas as empresas vão para a página; busca e filtros rodam no navegador.
+    empresas = _com_relacionamentos(Empresa.query).order_by(Empresa.razao_social).all()
+    modulos = Modulo.ativos()
+    responsaveis = {}  # por módulo: responsáveis que aparecem na lista
+    for m in modulos:
+        nomes = {c.responsavel for e in empresas for c in e.controles
+                 if c.modulo_id == m.id and c.responsavel}
+        responsaveis[m.codigo] = sorted(nomes, key=lambda r: r.nome.lower())
+    regimes = sorted({e.regime for e in empresas}, key=lambda r: r.nome.lower())
     return render_template(
-        "empresas/lista.html", empresas=_com_relacionamentos(q).order_by(Empresa.razao_social).all(),
-        mostrar_inativas=mostrar_inativas, modulos=Modulo.ativos(),
+        "empresas/lista.html", empresas=empresas, modulos=modulos,
+        responsaveis=responsaveis, regimes=regimes,
+        # compatibilidade com o antigo link "Mostrar inativas"
+        situacao_inicial="todas" if request.args.get("inativas") == "1" else "",
     )
 
 
