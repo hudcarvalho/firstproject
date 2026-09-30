@@ -2,57 +2,53 @@
 {% from "_macros.html" import badge_ativo %}
 {% block title %}Clientes{% endblock %}
 {% block content %}
-<div class="d-flex justify-content-between align-items-center mb-3">
+<div class="d-flex justify-content-between align-items-center mb-2">
   <h1 class="h3 mb-0">Clientes</h1>
   <div>
     {% if current_user.admin %}<a class="btn btn-outline-primary" href="{{ url_for('main.importar') }}">Importar planilha</a>{% endif %}
     <a class="btn btn-primary" href="{{ url_for('main.empresa_nova') }}">+ Nova empresa</a>
   </div>
 </div>
-
-<div class="row g-2 align-items-end mb-2" id="filtros">
-  <div class="col-lg-4 col-md-12">
-    <label class="form-label small text-muted mb-1" for="busca">Buscar</label>
-    <input type="search" class="form-control" id="busca" data-param="q" placeholder="Nome, código ou CNPJ (mín. 2 caracteres)" autocomplete="off" autofocus>
-  </div>
-  {% for m in modulos %}
-  <div class="col-lg-2 col-md-4">
-    <label class="form-label small text-muted mb-1" for="f-resp-{{ m.codigo }}">Resp. {{ m.nome }}</label>
-    <select class="form-select filtro" id="f-resp-{{ m.codigo }}" data-param="resp_{{ m.codigo }}" data-campo="resp{{ m.codigo }}">
-      <option value="">Todos</option>
-      <option value="0">— sem responsável —</option>
-      {% for r in responsaveis[m.codigo] %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
-    </select>
-  </div>
-  {% endfor %}
-  <div class="col-lg-2 col-md-4">
-    <label class="form-label small text-muted mb-1" for="f-regime">Tributação</label>
-    <select class="form-select filtro" id="f-regime" data-param="trib" data-campo="regime">
-      <option value="">Todas</option>
-      {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
-    </select>
-  </div>
-  <div class="col-lg-2 col-md-4">
-    <label class="form-label small text-muted mb-1" for="f-situacao">Situação</label>
-    <select class="form-select filtro" id="f-situacao" data-param="sit" data-campo="situacao">
-      <option value="">Ativas</option>
-      <option value="inativa">Inativas</option>
-      <option value="todas" {{ 'selected' if situacao_inicial == 'todas' }}>Todas</option>
-    </select>
-  </div>
-</div>
-<div class="d-flex align-items-center gap-3 mb-3 small">
+<div class="d-flex align-items-center gap-3 mb-2 small">
   <span class="text-muted" id="busca-contador"></span>
   <a href="#" id="limpar-filtros" class="d-none">Limpar filtros</a>
 </div>
 
-<div class="card"><div class="table-responsive">
-<table class="table table-hover align-middle mb-0">
-  <thead class="table-light"><tr><th>Código</th><th>Razão social</th><th>CNPJ</th><th>Tributação</th>
-    {% for m in modulos %}<th>Resp. {{ m.nome }}</th>{% endfor %}<th>Situação</th><th></th></tr></thead>
+<div class="card"><div class="table-responsive planilha">
+<table class="table table-hover table-sm align-middle mb-0">
+  <thead>
+    <tr class="titulos">
+      <th style="width: 90px">Código</th><th>Razão social</th><th style="width: 170px">CNPJ</th>
+      <th style="width: 180px">Tributação</th>
+      {% for m in modulos %}<th style="width: 160px">Resp. {{ m.nome }}</th>{% endfor %}
+      <th style="width: 120px">Situação</th><th style="width: 70px"></th>
+    </tr>
+    <tr class="filtros" id="filtros">
+      <th><input type="search" class="form-control form-control-sm filtro" id="f-codigo" data-param="cod" placeholder="Filtrar…" autocomplete="off"></th>
+      <th><input type="search" class="form-control form-control-sm filtro" id="f-nome" data-param="nome" placeholder="Filtrar nome…" autocomplete="off" autofocus></th>
+      <th><input type="search" class="form-control form-control-sm filtro" id="f-cnpj" data-param="cnpj" placeholder="Filtrar…" autocomplete="off" inputmode="numeric"></th>
+      <th><select class="form-select form-select-sm filtro" id="f-regime" data-param="trib" data-campo="regime">
+        <option value="">Todas</option>
+        {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
+      </select></th>
+      {% for m in modulos %}
+      <th><select class="form-select form-select-sm filtro" id="f-resp-{{ m.codigo }}" data-param="resp_{{ m.codigo }}" data-campo="resp{{ m.codigo }}">
+        <option value="">Todos</option>
+        <option value="0">— sem responsável —</option>
+        {% for r in responsaveis[m.codigo] %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
+      </select></th>
+      {% endfor %}
+      <th><select class="form-select form-select-sm filtro" id="f-situacao" data-param="sit" data-campo="situacao">
+        <option value="">Ativas</option>
+        <option value="inativa">Inativas</option>
+        <option value="todas" {{ 'selected' if situacao_inicial == 'todas' }}>Todas</option>
+      </select></th>
+      <th></th>
+    </tr>
+  </thead>
   <tbody>
   {% for e in empresas %}
-    <tr class="linha-cliente" data-texto="{{ [e.codigo or '', e.razao_social, e.nome_fantasia or ''] | join(' ') }}" data-cnpj="{{ e.cnpj }}"
+    <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-cnpj="{{ e.cnpj }}"
         data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
@@ -74,74 +70,74 @@
 {% block scripts %}
 <script>
 (function () {
-  const campo = document.getElementById('busca');
-  const filtros = Array.from(document.querySelectorAll('select.filtro'));
+  const filtros = Array.from(document.querySelectorAll('#filtros .filtro'));
+  const fCodigo = document.getElementById('f-codigo');
+  const fNome = document.getElementById('f-nome');
+  const fCnpj = document.getElementById('f-cnpj');
+  const selects = filtros.filter(f => f.tagName === 'SELECT');
   const contador = document.getElementById('busca-contador');
   const vazio = document.getElementById('busca-vazio');
   const limpar = document.getElementById('limpar-filtros');
   // sem acentos e em minúsculas, para "associacao" achar "ASSOCIAÇÃO"
   const normalizar = t => t.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
   const linhas = Array.from(document.querySelectorAll('tr.linha-cliente')).map(tr => ({
-    tr, texto: normalizar(tr.dataset.texto), cnpj: tr.dataset.cnpj, dados: tr.dataset
+    tr, dados: tr.dataset, codigo: normalizar(tr.dataset.codigo), nome: normalizar(tr.dataset.nome)
   }));
   const plural = n => n + ' cliente' + (n === 1 ? '' : 's');
 
-  function passaNosFiltros(l) {
-    for (const f of filtros) {
-      const valor = f.value;
-      if (f.dataset.campo === 'situacao') {
-        if (valor === '' && l.dados.situacao !== 'ativa') return false;
-        if (valor === 'inativa' && l.dados.situacao !== 'inativa') return false;
-      } else if (valor !== '' && l.dados[f.dataset.campo] !== valor) {
-        return false;
-      }
-    }
-    return true;
-  }
-
   function aplicar() {
-    const termo = normalizar(campo.value.trim());
-    const digitos = termo.replace(/\D/g, '');
-    const buscando = termo.length >= 2;
-    // CNPJ só a partir de 5 dígitos (ou digitado com pontuação), para "29" achar o código 29
-    const buscaCnpj = digitos.length >= 5 || (digitos.length >= 2 && /[.\/-]/.test(termo));
-    let visiveis = 0, universo = 0;
+    const codigo = normalizar(fCodigo.value.trim());
+    const nome = normalizar(fNome.value.trim());
+    const cnpj = fCnpj.value.replace(/\D/g, '');
+    let visiveis = 0;
     for (const l of linhas) {
-      const filtrado = passaNosFiltros(l);
-      if (filtrado) universo++;
-      const ok = filtrado && (!buscando || l.texto.includes(termo) || (buscaCnpj && l.cnpj.includes(digitos)));
+      let ok = (!codigo || l.codigo.startsWith(codigo))          // código: começa com
+        && (nome.length < 2 || l.nome.includes(nome))           // nome: contém (a partir de 2 letras)
+        && (!cnpj || l.dados.cnpj.includes(cnpj));              // CNPJ: contém os dígitos
+      for (const s of selects) {
+        if (!ok) break;
+        const v = s.value;
+        if (s.dataset.campo === 'situacao') {
+          ok = v === 'todas' || l.dados.situacao === (v || 'ativa');
+        } else if (v !== '') {
+          ok = l.dados[s.dataset.campo] === v;
+        }
+      }
       l.tr.classList.toggle('d-none', !ok);
       if (ok) visiveis++;
     }
     vazio.classList.toggle('d-none', visiveis > 0);
-    const algumFiltro = buscando || filtros.some(f => f.value !== '');
+    const algumFiltro = filtros.some(f => f.value.trim() !== '');
     contador.textContent = algumFiltro ? plural(visiveis) + ' de ' + linhas.length : plural(visiveis) + ' ativos';
     limpar.classList.toggle('d-none', !algumFiltro);
-    for (const f of filtros) f.classList.toggle('border-primary', f.value !== '');
+    filtros.forEach(f => f.classList.toggle('filtro-ativo', f.value.trim() !== ''));
 
-    // guarda busca e filtros no endereço, para continuarem ao voltar à página
+    // guarda os filtros no endereço, para continuarem ao voltar à página
     const url = new URL(location);
-    url.searchParams.delete('inativas');
-    buscando ? url.searchParams.set('q', campo.value.trim()) : url.searchParams.delete('q');
-    for (const f of filtros) f.value ? url.searchParams.set(f.dataset.param, f.value) : url.searchParams.delete(f.dataset.param);
+    ['inativas', 'q'].forEach(p => url.searchParams.delete(p));
+    for (const f of filtros) {
+      const v = f.value.trim();
+      v ? url.searchParams.set(f.dataset.param, v) : url.searchParams.delete(f.dataset.param);
+    }
     history.replaceState(null, '', url);
   }
 
-  campo.addEventListener('input', aplicar);
-  campo.addEventListener('keydown', e => { if (e.key === 'Escape') { campo.value = ''; aplicar(); } });
-  filtros.forEach(f => f.addEventListener('change', aplicar));
+  filtros.forEach(f => {
+    f.addEventListener(f.tagName === 'SELECT' ? 'change' : 'input', aplicar);
+    if (f.tagName === 'INPUT') f.addEventListener('keydown', e => { if (e.key === 'Escape') { f.value = ''; aplicar(); } });
+  });
   limpar.addEventListener('click', e => {
     e.preventDefault();
-    campo.value = '';
     filtros.forEach(f => { f.value = ''; });
     aplicar();
   });
 
   const params = new URLSearchParams(location.search);
-  if (params.get('q')) campo.value = params.get('q');
+  if (params.get('q') && !params.get('nome')) params.set('nome', params.get('q'));  // links antigos
   for (const f of filtros) {
     const v = params.get(f.dataset.param);
-    if (v !== null && Array.from(f.options).some(o => o.value === v)) f.value = v;
+    if (v === null) continue;
+    if (f.tagName === 'INPUT' || Array.from(f.options).some(o => o.value === v)) f.value = v;
   }
   aplicar();
 })();
