@@ -16,6 +16,7 @@ Variáveis de ambiente:
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import time
@@ -48,12 +49,20 @@ def alteracoes(base):
 
 
 class API:
+    # A API do PythonAnywhere limita as requisições por minuto: espaça as chamadas.
+    INTERVALO = float(os.environ.get("PA_INTERVALO", "1.6"))
+
     def __init__(self, host, usuario, token):
         self.base = os.environ.get("PA_API_BASE") or f"https://{host}/api/v0/user/{usuario}"
         self.token = token
+        self._ultima = 0.0
 
-    def chamar(self, metodo, caminho, corpo=None, tipo=None, tentativas=6):
+    def chamar(self, metodo, caminho, corpo=None, tipo=None, tentativas=8):
         for tentativa in range(tentativas):
+            espera = self.INTERVALO - (time.monotonic() - self._ultima)
+            if espera > 0:
+                time.sleep(espera)
+            self._ultima = time.monotonic()
             req = urllib.request.Request(self.base + caminho, data=corpo, method=metodo)
             req.add_header("Authorization", f"Token {self.token}")
             if tipo:
@@ -62,15 +71,28 @@ class API:
                 with urllib.request.urlopen(req, timeout=60) as resp:
                     return resp.status, resp.read()
             except urllib.error.HTTPError as erro:
+                resposta = erro.read()
                 if erro.code in (429, 500, 502, 503, 504) and tentativa < tentativas - 1:
-                    time.sleep(2 ** tentativa)  # limite de requisições ou instabilidade
+                    time.sleep(self._tempo_espera(erro, resposta, tentativa))
                     continue
-                return erro.code, erro.read()
+                return erro.code, resposta
             except urllib.error.URLError:
                 if tentativa < tentativas - 1:
                     time.sleep(2 ** tentativa)
                     continue
                 raise
+
+    @staticmethod
+    def _tempo_espera(erro, resposta, tentativa):
+        """Segundos a esperar: o que a API pedir (Retry-After ou mensagem) ou espera crescente."""
+        pedido = erro.headers.get("Retry-After") if erro.headers else None
+        achado = re.search(rb"available in (\d+) second", resposta or b"")
+        for valor in (pedido, achado.group(1) if achado else None):
+            try:
+                return int(valor) + 1
+            except (TypeError, ValueError):
+                continue
+        return min(2 ** tentativa, 30)
 
     def ler_arquivo(self, caminho):
         status, corpo = self.chamar("GET", f"/files/path{caminho}")
@@ -143,7 +165,7 @@ def main():
     for caminho in enviar:
         with open(caminho, "rb") as f:
             status, corpo = api.enviar_arquivo(f"{projeto}/{caminho}", f.read())
-        if status not in (200, 201):
+        if not 200 <= status < 300:
             print(f"::error::Falha ao enviar {caminho}: HTTP {status} {corpo[:300]!r}")
             return 1
         print(f"  enviado  {caminho}")
@@ -155,7 +177,7 @@ def main():
         print(f"  removido {caminho}")
 
     status, corpo = api.chamar("POST", f"/webapps/{dominio}/reload/")
-    if status != 200:
+    if not 200 <= status < 300:
         print(f"::error::Falha ao recarregar o site: HTTP {status} {corpo[:300]!r}")
         return 1
     print("Site recarregado; conferindo se voltou ao ar…")
