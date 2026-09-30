@@ -14,7 +14,7 @@
     <div class="col-md-6"><label class="form-label">Telefone</label><input class="form-control" name="telefone" value="{{ empresa.telefone or '' }}"></div>
   </div>
 
-  <h2 class="h6 text-uppercase text-muted">Tributação e rotina</h2>
+  <h2 class="h6 text-uppercase text-muted">Tributação</h2>
   <div class="row g-3 mb-4">
     <div class="col-md-4">
       <label class="form-label">Tributação *</label>
@@ -22,23 +22,29 @@
         <option value="">Selecione…</option>
         {% for r in regimes %}<option value="{{ r.id }}" {{ 'selected' if empresa.regime_id == r.id or (empresa.regime and empresa.regime.id == r.id) }}>{{ r.nome }}</option>{% endfor %}
       </select>
-      <div class="form-text">Define as obrigações padrão da empresa.</div>
+      <div class="form-text">Define as obrigações padrão da empresa em cada módulo.</div>
     </div>
+    <div class="col-md-8"><label class="form-label">Observações</label><textarea class="form-control" name="observacoes" rows="2">{{ empresa.observacoes or '' }}</textarea></div>
+    <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if empresa.ativo }}><label class="form-check-label" for="ativo">Empresa ativa</label></div>
+  </div>
+
+  {% for m in modulos %}{% set c = empresa.controle(m) %}
+  <h2 class="h6 text-uppercase text-muted">Rotina · {{ m.nome }}</h2>
+  <div class="row g-3 mb-4">
     <div class="col-md-4">
       <label class="form-label">Responsável</label>
-      <select class="form-select" name="responsavel_id">
+      <select class="form-select" name="responsavel_{{ m.codigo }}">
         <option value="">— sem responsável —</option>
-        {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if empresa.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
+        {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if c and c.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
       </select>
       <div class="form-text"><a href="{{ url_for('main.responsavel_form') }}" target="_blank">Cadastrar responsável</a></div>
     </div>
     <div class="col-md-4">
-      <label class="form-label">Escriturada até (competência)</label>
-      <input type="month" class="form-control" name="escriturada_ate" value="{{ empresa.escriturada_ate | input_competencia }}">
+      <label class="form-label">{{ m.rotulo_controle }} (competência)</label>
+      <input type="month" class="form-control" name="concluido_{{ m.codigo }}" value="{{ (c.concluido_ate if c) | input_competencia }}">
     </div>
-    <div class="col-12"><label class="form-label">Observações</label><textarea class="form-control" name="observacoes" rows="3">{{ empresa.observacoes or '' }}</textarea></div>
-    <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if empresa.ativo }}><label class="form-check-label" for="ativo">Empresa ativa</label></div>
   </div>
+  {% endfor %}
 
   <div class="d-flex gap-2">
     <button class="btn btn-primary">Salvar</button>

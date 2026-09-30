@@ -1,3 +1,10 @@
+"""Telas do sistema.
+
+Cadastros compartilhados (clientes, regimes, responsáveis, módulos) ficam em URLs próprias.
+Tudo que é da rotina de uma área fica sob o código do módulo: /contabil/, /contabil/obrigacoes,
+/empresas/<id>/contabil… Ao ativar um novo módulo (Fiscal, DP, Paralegal) as mesmas telas
+passam a atendê-lo.
+"""
 from datetime import date
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
@@ -5,7 +12,7 @@ from sqlalchemy.exc import IntegrityError
 
 from .competencia import cnpj_valido, parse_competencia, so_digitos
 from .models import (
-    ESFERAS, PERIODICIDADES, Empresa, EmpresaObrigacaoAjuste, Entrega, Obrigacao,
+    ESFERAS, PERIODICIDADES, Empresa, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
     RegimeTributario, Responsavel, db,
 )
 
@@ -19,6 +26,14 @@ def _get(model, id_):
     return obj
 
 
+def _modulo(codigo):
+    """Módulo ativo pelo código da URL, ou 404."""
+    m = Modulo.query.filter_by(codigo=codigo, ativo=True).first()
+    if m is None:
+        abort(404)
+    return m
+
+
 def _int_or_none(valor):
     try:
         return int(valor)
@@ -26,17 +41,28 @@ def _int_or_none(valor):
         return None
 
 
-# ---------------------------------------------------------------- Painel
+def _responsaveis_ativos():
+    return Responsavel.query.filter_by(ativo=True).order_by(Responsavel.nome).all()
+
 
 @bp.route("/")
-def painel():
-    responsavel_id = _int_or_none(request.args.get("responsavel"))
+def inicio():
+    ativos = Modulo.ativos()
+    if not ativos:
+        return redirect(url_for("main.modulos_lista"))
+    return redirect(url_for("main.painel", modulo=ativos[0].codigo))
+
+
+# ---------------------------------------------------------------- Painel (por módulo)
+
+@bp.route("/<modulo>/")
+def painel(modulo):
+    modulo = _modulo(modulo)
+    responsavel = request.args.get("responsavel", "")  # "" = todos, "0" = sem responsável
     regime_id = _int_or_none(request.args.get("regime"))
     busca = (request.args.get("q") or "").strip()
 
     q = Empresa.query.filter_by(ativo=True)
-    if responsavel_id:
-        q = q.filter_by(responsavel_id=responsavel_id)
     if regime_id:
         q = q.filter_by(regime_id=regime_id)
     if busca:
@@ -45,28 +71,31 @@ def painel():
             Empresa.razao_social.ilike(like) | Empresa.nome_fantasia.ilike(like)
             | Empresa.cnpj.ilike(f"%{so_digitos(busca) or busca}%")
         )
-    empresas = q.order_by(Empresa.razao_social).all()
 
     hoje = date.today()
     linhas = []
-    for e in empresas:
-        situacao = e.situacao_obrigacoes(hoje)
+    for e in q.order_by(Empresa.razao_social):
+        controle = e.controle(modulo)
+        resp_id = controle.responsavel_id if controle else None
+        if responsavel and (resp_id or 0) != _int_or_none(responsavel):
+            continue
+        situacao = e.situacao_obrigacoes(modulo, hoje)
         linhas.append({
             "empresa": e,
-            "atraso": e.meses_escrituracao_atrasada(hoje),
+            "controle": controle,
+            "atraso": controle.meses_atrasados(hoje) if controle else None,
             "pendentes": sum(1 for s in situacao if s["status"] == "pendente"),
             "total": len(situacao),
         })
 
     return render_template(
-        "painel.html", linhas=linhas,
-        responsaveis=Responsavel.query.filter_by(ativo=True).order_by(Responsavel.nome).all(),
+        "painel.html", modulo=modulo, linhas=linhas, responsaveis=_responsaveis_ativos(),
         regimes=RegimeTributario.query.order_by(RegimeTributario.nome).all(),
-        filtros={"responsavel": responsavel_id, "regime": regime_id, "q": busca},
+        filtros={"responsavel": responsavel, "regime": regime_id, "q": busca},
     )
 
 
-# ---------------------------------------------------------------- Empresas
+# ---------------------------------------------------------------- Empresas (cadastro compartilhado)
 
 @bp.route("/empresas")
 def empresas_lista():
@@ -76,7 +105,7 @@ def empresas_lista():
         q = q.filter_by(ativo=True)
     return render_template(
         "empresas/lista.html", empresas=q.order_by(Empresa.razao_social).all(),
-        mostrar_inativas=mostrar_inativas,
+        mostrar_inativas=mostrar_inativas, modulos=Modulo.ativos(),
     )
 
 
@@ -95,8 +124,6 @@ def _form_empresa(empresa):
     regime = db.session.get(RegimeTributario, _int_or_none(f.get("regime_id")) or 0)
     if regime is None:
         erros.append("Selecione a tributação.")
-    if f.get("escriturada_ate") and parse_competencia(f.get("escriturada_ate")) is None:
-        erros.append("Competência de escrituração inválida.")
 
     empresa.razao_social = f.get("razao_social", "").strip()
     empresa.nome_fantasia = f.get("nome_fantasia", "").strip() or None
@@ -106,37 +133,51 @@ def _form_empresa(empresa):
     empresa.email = f.get("email", "").strip() or None
     empresa.telefone = f.get("telefone", "").strip() or None
     empresa.regime = regime
-    empresa.responsavel_id = _int_or_none(f.get("responsavel_id"))
-    empresa.escriturada_ate = parse_competencia(f.get("escriturada_ate"))
     empresa.observacoes = f.get("observacoes", "").strip() or None
     empresa.ativo = f.get("ativo") == "on"
+
+    # Responsável e andamento por módulo ativo.
+    for m in Modulo.ativos():
+        controle = empresa.controle(m, criar=True)
+        controle.responsavel_id = _int_or_none(f.get(f"responsavel_{m.codigo}"))
+        bruto = f.get(f"concluido_{m.codigo}")
+        controle.concluido_ate = parse_competencia(bruto)
+        if bruto and controle.concluido_ate is None:
+            erros.append(f"{m.nome}: competência inválida em “{m.rotulo_controle}”.")
     return erros
 
 
 def _render_form_empresa(empresa):
     return render_template(
-        "empresas/form.html", empresa=empresa,
+        "empresas/form.html", empresa=empresa, modulos=Modulo.ativos(),
         regimes=RegimeTributario.query.filter_by(ativo=True).order_by(RegimeTributario.nome).all(),
-        responsaveis=Responsavel.query.filter_by(ativo=True).order_by(Responsavel.nome).all(),
+        responsaveis=_responsaveis_ativos(),
     )
+
+
+def _salvar_form_empresa(empresa, nova):
+    with db.session.no_autoflush:
+        erros = _form_empresa(empresa)
+    if not erros:
+        if nova:
+            db.session.add(empresa)
+        db.session.commit()
+        flash("Empresa cadastrada." if nova else "Empresa atualizada.", "success")
+        return redirect(url_for("main.empresa_detalhe", id=empresa.id))
+    for e in erros:
+        flash(e, "danger")
+    # Renderiza com o que foi digitado e descarta as alterações inválidas.
+    with db.session.no_autoflush:
+        html = _render_form_empresa(empresa)
+    db.session.rollback()
+    return html
 
 
 @bp.route("/empresas/nova", methods=["GET", "POST"])
 def empresa_nova():
     empresa = Empresa(ativo=True)
     if request.method == "POST":
-        erros = _form_empresa(empresa)
-        if not erros:
-            db.session.add(empresa)
-            db.session.commit()
-            flash("Empresa cadastrada.", "success")
-            return redirect(url_for("main.empresa_detalhe", id=empresa.id))
-        for e in erros:
-            flash(e, "danger")
-        with db.session.no_autoflush:
-            html = _render_form_empresa(empresa)
-        db.session.rollback()
-        return html
+        return _salvar_form_empresa(empresa, nova=True)
     return _render_form_empresa(empresa)
 
 
@@ -144,59 +185,66 @@ def empresa_nova():
 def empresa_editar(id):
     empresa = _get(Empresa, id)
     if request.method == "POST":
-        with db.session.no_autoflush:
-            erros = _form_empresa(empresa)
-        if not erros:
-            db.session.commit()
-            flash("Empresa atualizada.", "success")
-            return redirect(url_for("main.empresa_detalhe", id=empresa.id))
-        for e in erros:
-            flash(e, "danger")
-        # Renderiza com o que foi digitado e descarta as alterações inválidas.
-        with db.session.no_autoflush:
-            html = _render_form_empresa(empresa)
-        db.session.rollback()
-        return html
+        return _salvar_form_empresa(empresa, nova=False)
     return _render_form_empresa(empresa)
 
 
 @bp.route("/empresas/<int:id>")
 def empresa_detalhe(id):
+    _get(Empresa, id)
+    ativos = Modulo.ativos()
+    if not ativos:
+        return redirect(url_for("main.empresa_editar", id=id))
+    return redirect(url_for("main.empresa_modulo", id=id, modulo=ativos[0].codigo))
+
+
+# ---------------------------------------------------------------- Empresa dentro de um módulo
+
+@bp.route("/empresas/<int:id>/<modulo>")
+def empresa_modulo(id, modulo):
     empresa = _get(Empresa, id)
+    modulo = _modulo(modulo)
     hoje = date.today()
-    ids_ajustados = {a.obrigacao_id for a in empresa.ajustes}
-    ids_regime = {o.id for o in empresa.regime.obrigacoes}
-    todas = Obrigacao.query.filter_by(ativo=True).order_by(Obrigacao.nome).all()
+    controle = empresa.controle(modulo)
+    ajustes = [a for a in empresa.ajustes if a.obrigacao.modulo_id == modulo.id]
+    ids_ajustados = {a.obrigacao_id for a in ajustes}
+    do_regime = empresa.regime.obrigacoes_do_modulo(modulo)
+    ids_regime = {o.id for o in do_regime}
     return render_template(
-        "empresas/detalhe.html", empresa=empresa, hoje=hoje,
-        situacao=empresa.situacao_obrigacoes(hoje),
-        atraso=empresa.meses_escrituracao_atrasada(hoje),
-        obrigacoes_aplicaveis=empresa.obrigacoes_aplicaveis(),
-        podem_incluir=[o for o in todas if o.id not in ids_regime and o.id not in ids_ajustados],
-        podem_excluir=[o for o in empresa.regime.obrigacoes if o.id not in ids_ajustados],
-        responsaveis=Responsavel.query.filter_by(ativo=True).order_by(Responsavel.nome).all(),
+        "empresas/detalhe.html", empresa=empresa, modulo=modulo, modulos=Modulo.ativos(),
+        hoje=hoje, controle=controle, ajustes=ajustes,
+        atraso=controle.meses_atrasados(hoje) if controle else None,
+        situacao=empresa.situacao_obrigacoes(modulo, hoje),
+        entregas=empresa.entregas_do_modulo(modulo),
+        obrigacoes_aplicaveis=empresa.obrigacoes_aplicaveis(modulo),
+        podem_incluir=[o for o in modulo.obrigacoes
+                       if o.ativo and o.id not in ids_regime and o.id not in ids_ajustados],
+        podem_excluir=[o for o in do_regime if o.id not in ids_ajustados],
+        responsaveis=_responsaveis_ativos(),
     )
 
 
-@bp.post("/empresas/<int:id>/escrituracao")
-def empresa_escrituracao(id):
+@bp.post("/empresas/<int:id>/<modulo>/controle")
+def empresa_controle(id, modulo):
     empresa = _get(Empresa, id)
-    comp = parse_competencia(request.form.get("escriturada_ate"))
+    modulo = _modulo(modulo)
+    comp = parse_competencia(request.form.get("concluido_ate"))
     if comp is None:
         flash("Competência inválida.", "danger")
     else:
-        empresa.escriturada_ate = comp
+        empresa.controle(modulo, criar=True).concluido_ate = comp
         db.session.commit()
-        flash(f"Escrituração atualizada até {comp:%m/%Y}.", "success")
-    return redirect(url_for("main.empresa_detalhe", id=id))
+        flash(f"{modulo.rotulo_controle} {comp:%m/%Y}.", "success")
+    return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
 
 
-@bp.post("/empresas/<int:id>/ajustes")
-def empresa_ajuste_novo(id):
+@bp.post("/empresas/<int:id>/<modulo>/ajustes")
+def empresa_ajuste_novo(id, modulo):
     empresa = _get(Empresa, id)
+    modulo = _modulo(modulo)
     tipo = request.form.get("tipo")
     obrigacao = db.session.get(Obrigacao, _int_or_none(request.form.get("obrigacao_id")) or 0)
-    if tipo not in ("incluir", "excluir") or obrigacao is None:
+    if tipo not in ("incluir", "excluir") or obrigacao is None or obrigacao.modulo_id != modulo.id:
         flash("Ajuste inválido.", "danger")
     else:
         db.session.add(EmpresaObrigacaoAjuste(empresa=empresa, obrigacao=obrigacao, tipo=tipo))
@@ -206,7 +254,7 @@ def empresa_ajuste_novo(id):
         except IntegrityError:
             db.session.rollback()
             flash("Já existe um ajuste para essa obrigação.", "warning")
-    return redirect(url_for("main.empresa_detalhe", id=id))
+    return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
 
 
 @bp.post("/empresas/<int:id>/ajustes/<int:ajuste_id>/remover")
@@ -214,25 +262,28 @@ def empresa_ajuste_remover(id, ajuste_id):
     ajuste = _get(EmpresaObrigacaoAjuste, ajuste_id)
     if ajuste.empresa_id != id:
         abort(404)
+    codigo = ajuste.obrigacao.modulo.codigo
     db.session.delete(ajuste)
     db.session.commit()
     flash("Ajuste removido.", "success")
-    return redirect(url_for("main.empresa_detalhe", id=id))
+    return redirect(url_for("main.empresa_modulo", id=id, modulo=codigo))
 
 
-@bp.post("/empresas/<int:id>/entregas")
-def entrega_nova(id):
+@bp.post("/empresas/<int:id>/<modulo>/entregas")
+def entrega_nova(id, modulo):
     empresa = _get(Empresa, id)
+    modulo = _modulo(modulo)
     f = request.form
     obrigacao = db.session.get(Obrigacao, _int_or_none(f.get("obrigacao_id")) or 0)
     comp = parse_competencia(f.get("competencia"))
     try:
-        data_entrega = date.fromisoformat(f.get("data_entrega")) if f.get("data_entrega") else date.today()
+        data_entrega = date.fromisoformat(f["data_entrega"]) if f.get("data_entrega") else date.today()
     except ValueError:
         data_entrega = None
-    if obrigacao is None or comp is None or data_entrega is None:
+    destino = redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
+    if obrigacao is None or obrigacao.modulo_id != modulo.id or comp is None or data_entrega is None:
         flash("Preencha obrigação, competência e data corretamente.", "danger")
-        return redirect(url_for("main.empresa_detalhe", id=id))
+        return destino
 
     db.session.add(Entrega(
         empresa=empresa, obrigacao=obrigacao, competencia=comp, data_entrega=data_entrega,
@@ -245,42 +296,48 @@ def entrega_nova(id):
     except IntegrityError:
         db.session.rollback()
         flash(f"{obrigacao.nome} {comp:%m/%Y} já estava registrada.", "warning")
-    return redirect(url_for("main.empresa_detalhe", id=id))
+    return destino
 
 
 @bp.post("/entregas/<int:id>/remover")
 def entrega_remover(id):
     entrega = _get(Entrega, id)
-    empresa_id = entrega.empresa_id
+    destino = url_for("main.empresa_modulo", id=entrega.empresa_id,
+                      modulo=entrega.obrigacao.modulo.codigo)
     db.session.delete(entrega)
     db.session.commit()
     flash("Registro removido.", "success")
-    return redirect(url_for("main.empresa_detalhe", id=empresa_id))
+    return redirect(destino)
 
 
-# ---------------------------------------------------------------- Obrigações
+# ---------------------------------------------------------------- Obrigações (por módulo)
 
-@bp.route("/obrigacoes")
-def obrigacoes_lista():
-    return render_template(
-        "obrigacoes/lista.html", obrigacoes=Obrigacao.query.order_by(Obrigacao.nome).all()
-    )
+@bp.route("/<modulo>/obrigacoes")
+def obrigacoes_lista(modulo):
+    modulo = _modulo(modulo)
+    return render_template("obrigacoes/lista.html", modulo=modulo, obrigacoes=modulo.obrigacoes)
 
 
-@bp.route("/obrigacoes/nova", methods=["GET", "POST"], defaults={"id": None})
-@bp.route("/obrigacoes/<int:id>/editar", methods=["GET", "POST"])
-def obrigacao_form(id):
-    obrigacao = _get(Obrigacao, id) if id else Obrigacao(ativo=True, periodicidade="mensal", esfera="federal")
+@bp.route("/<modulo>/obrigacoes/nova", methods=["GET", "POST"], defaults={"id": None})
+@bp.route("/<modulo>/obrigacoes/<int:id>/editar", methods=["GET", "POST"])
+def obrigacao_form(modulo, id):
+    modulo = _modulo(modulo)
+    if id:
+        obrigacao = _get(Obrigacao, id)
+        if obrigacao.modulo_id != modulo.id:
+            abort(404)
+    else:
+        obrigacao = Obrigacao(ativo=True, periodicidade="mensal", esfera="federal")
     regimes = RegimeTributario.query.order_by(RegimeTributario.nome).all()
     if request.method == "POST":
         f = request.form
         nome = f.get("nome", "").strip()
-        existente = Obrigacao.query.filter(Obrigacao.nome == nome).first()
+        existente = Obrigacao.query.filter_by(modulo_id=modulo.id, nome=nome).first()
         erros = []
         if not nome:
             erros.append("Informe o nome.")
         elif existente and existente.id != obrigacao.id:
-            erros.append("Já existe uma obrigação com esse nome.")
+            erros.append("Já existe uma obrigação com esse nome neste módulo.")
         if f.get("periodicidade") not in PERIODICIDADES:
             erros.append("Periodicidade inválida.")
         if f.get("esfera") not in ESFERAS:
@@ -292,6 +349,7 @@ def obrigacao_form(id):
             for e in erros:
                 flash(e, "danger")
         else:
+            obrigacao.modulo = modulo
             obrigacao.nome = nome
             obrigacao.descricao = f.get("descricao", "").strip() or None
             obrigacao.periodicidade = f["periodicidade"]
@@ -304,16 +362,39 @@ def obrigacao_form(id):
                 db.session.add(obrigacao)
             db.session.commit()
             flash("Obrigação salva.", "success")
-            return redirect(url_for("main.obrigacoes_lista"))
-    return render_template("obrigacoes/form.html", obrigacao=obrigacao, regimes=regimes)
+            return redirect(url_for("main.obrigacoes_lista", modulo=modulo.codigo))
+    return render_template("obrigacoes/form.html", modulo=modulo, obrigacao=obrigacao, regimes=regimes)
 
 
-# ---------------------------------------------------------------- Regimes / matriz
+@bp.route("/<modulo>/matriz", methods=["GET", "POST"])
+def matriz(modulo):
+    """Parametrização das obrigações do módulo por tipo de tributação (grade de checkboxes)."""
+    modulo = _modulo(modulo)
+    regimes = RegimeTributario.query.order_by(RegimeTributario.nome).all()
+    obrigacoes = modulo.obrigacoes
+    if request.method == "POST":
+        marcados = set(request.form.getlist("vinculo"))  # "regimeId-obrigacaoId"
+        for r in regimes:
+            # Preserva os vínculos de outros módulos.
+            outros = [o for o in r.obrigacoes if o.modulo_id != modulo.id]
+            r.obrigacoes = outros + [o for o in obrigacoes if f"{r.id}-{o.id}" in marcados]
+        db.session.commit()
+        flash("Parametrização salva.", "success")
+        return redirect(url_for("main.matriz", modulo=modulo.codigo))
+    vinculos = {(r.id, o.id) for r in regimes for o in r.obrigacoes}
+    return render_template(
+        "regimes/matriz.html", modulo=modulo, regimes=regimes, obrigacoes=obrigacoes,
+        vinculos=vinculos,
+    )
+
+
+# ---------------------------------------------------------------- Regimes
 
 @bp.route("/regimes")
 def regimes_lista():
     return render_template(
-        "regimes/lista.html", regimes=RegimeTributario.query.order_by(RegimeTributario.nome).all()
+        "regimes/lista.html", regimes=RegimeTributario.query.order_by(RegimeTributario.nome).all(),
+        modulos=Modulo.ativos(),
     )
 
 
@@ -340,30 +421,13 @@ def regime_form(id):
     return render_template("regimes/form.html", regime=regime)
 
 
-@bp.route("/regimes/matriz", methods=["GET", "POST"])
-def regimes_matriz():
-    """Parametrização das obrigações por tipo de tributação (grade de checkboxes)."""
-    regimes = RegimeTributario.query.order_by(RegimeTributario.nome).all()
-    obrigacoes = Obrigacao.query.order_by(Obrigacao.nome).all()
-    if request.method == "POST":
-        marcados = set(request.form.getlist("vinculo"))  # "regimeId-obrigacaoId"
-        for r in regimes:
-            r.obrigacoes = [o for o in obrigacoes if f"{r.id}-{o.id}" in marcados]
-        db.session.commit()
-        flash("Parametrização salva.", "success")
-        return redirect(url_for("main.regimes_matriz"))
-    vinculos = {(r.id, o.id) for r in regimes for o in r.obrigacoes}
-    return render_template(
-        "regimes/matriz.html", regimes=regimes, obrigacoes=obrigacoes, vinculos=vinculos
-    )
-
-
 # ---------------------------------------------------------------- Responsáveis
 
 @bp.route("/responsaveis")
 def responsaveis_lista():
     return render_template(
-        "responsaveis/lista.html", responsaveis=Responsavel.query.order_by(Responsavel.nome).all()
+        "responsaveis/lista.html", modulos=Modulo.ativos(),
+        responsaveis=Responsavel.query.order_by(Responsavel.nome).all(),
     )
 
 
@@ -385,3 +449,28 @@ def responsavel_form(id):
             flash("Responsável salvo.", "success")
             return redirect(url_for("main.responsaveis_lista"))
     return render_template("responsaveis/form.html", resp=resp)
+
+
+# ---------------------------------------------------------------- Módulos
+
+@bp.route("/modulos")
+def modulos_lista():
+    return render_template("modulos/lista.html", modulos=Modulo.query.order_by(Modulo.ordem).all())
+
+
+@bp.route("/modulos/<int:id>/editar", methods=["GET", "POST"])
+def modulo_form(id):
+    modulo = _get(Modulo, id)
+    if request.method == "POST":
+        nome = request.form.get("nome", "").strip()
+        rotulo = request.form.get("rotulo_controle", "").strip()
+        if not nome or not rotulo:
+            flash("Informe o nome e o rótulo do controle.", "danger")
+        else:
+            modulo.nome = nome
+            modulo.rotulo_controle = rotulo
+            modulo.ativo = request.form.get("ativo") == "on"
+            db.session.commit()
+            flash("Módulo salvo.", "success")
+            return redirect(url_for("main.modulos_lista"))
+    return render_template("modulos/form.html", modulo=modulo)

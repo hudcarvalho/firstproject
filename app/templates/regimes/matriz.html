@@ -1,11 +1,11 @@
 {% extends "base.html" %}
-{% block title %}Obrigações × Tributação{% endblock %}
+{% block title %}{{ modulo.nome }} · Obrigações × Tributação{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
-  <h1 class="h3 mb-0">Obrigações × Tributação</h1>
-  <a class="btn btn-outline-secondary" href="{{ url_for('main.obrigacao_form') }}">+ Nova obrigação</a>
+  <h1 class="h3 mb-0">Obrigações × Tributação · {{ modulo.nome }}</h1>
+  <a class="btn btn-outline-secondary" href="{{ url_for('main.obrigacao_form', modulo=modulo.codigo) }}">+ Nova obrigação</a>
 </div>
-<p class="text-muted">Marque quais obrigações cada tipo de tributação exige. Todas as empresas do regime passam a ter essas obrigações (exceções podem ser feitas na tela da empresa).</p>
+<p class="text-muted">Marque quais obrigações de {{ modulo.nome }} cada tipo de tributação exige. Todas as empresas do regime passam a ter essas obrigações (exceções podem ser feitas na tela da empresa).</p>
 <form method="post" class="card">
   <div class="table-responsive">
   <table class="table table-bordered table-hover align-middle mb-0 matriz">

@@ -3,7 +3,9 @@ import os
 from flask import Flask
 
 from .competencia import fmt_competencia, input_competencia
-from .models import ESFERAS, PERIODICIDADES, db
+from sqlalchemy import inspect
+
+from .models import ESFERAS, PERIODICIDADES, Modulo, db
 
 
 def create_app(config=None):
@@ -25,10 +27,21 @@ def create_app(config=None):
     app.jinja_env.filters["data_br"] = lambda d: d.strftime("%d/%m/%Y") if d else "—"
     app.jinja_env.globals.update(PERIODICIDADES=PERIODICIDADES, ESFERAS=ESFERAS)
 
+    @app.context_processor
+    def modulos_no_menu():
+        return {"modulos_ativos": Modulo.ativos()}
+
     from .routes import bp
     app.register_blueprint(bp)
 
     with app.app_context():
+        colunas = {c["name"] for c in inspect(db.engine).get_columns("empresa")} \
+            if inspect(db.engine).has_table("empresa") else set()
+        if "escriturada_ate" in colunas:
+            raise RuntimeError(
+                "Banco criado pela versão anterior (sem módulos). "
+                "Apague instance/controle.db e inicie novamente."
+            )
         db.create_all()
         from .seed import seed
         seed()

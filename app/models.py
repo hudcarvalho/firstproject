@@ -28,6 +28,28 @@ regime_obrigacao = db.Table(
 )
 
 
+class Modulo(db.Model):
+    """Área de atuação do escritório (Contábil, Fiscal, DP, Paralegal).
+
+    Obrigações, responsável e controle de "concluído até" são sempre por módulo.
+    Só módulos ativos aparecem nas telas.
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(20), unique=True, nullable=False)  # usado na URL
+    nome = db.Column(db.String(60), nullable=False)
+    # Rótulo do controle de andamento: "Escriturada até", "Apurado até", "Folha fechada até"…
+    rotulo_controle = db.Column(db.String(60), nullable=False, default="Concluído até")
+    ordem = db.Column(db.Integer, nullable=False, default=0)
+    ativo = db.Column(db.Boolean, default=False, nullable=False)
+
+    obrigacoes = db.relationship("Obrigacao", back_populates="modulo", order_by="Obrigacao.nome")
+
+    @staticmethod
+    def ativos():
+        return Modulo.query.filter_by(ativo=True).order_by(Modulo.ordem).all()
+
+
 class RegimeTributario(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(80), unique=True, nullable=False)
@@ -39,6 +61,9 @@ class RegimeTributario(db.Model):
     )
     empresas = db.relationship("Empresa", back_populates="regime")
 
+    def obrigacoes_do_modulo(self, modulo):
+        return [o for o in self.obrigacoes if o.modulo_id == modulo.id]
+
 
 class Responsavel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -46,21 +71,29 @@ class Responsavel(db.Model):
     email = db.Column(db.String(120))
     ativo = db.Column(db.Boolean, default=True, nullable=False)
 
-    empresas = db.relationship("Empresa", back_populates="responsavel")
+    controles = db.relationship("EmpresaModulo", back_populates="responsavel")
+
+    def empresas_ativas(self, modulo=None):
+        return [c.empresa for c in self.controles
+                if c.empresa.ativo and (modulo is None or c.modulo_id == modulo.id)]
 
 
 class Obrigacao(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    nome = db.Column(db.String(120), unique=True, nullable=False)
+    modulo_id = db.Column(db.Integer, db.ForeignKey("modulo.id"), nullable=False)
+    nome = db.Column(db.String(120), nullable=False)
     descricao = db.Column(db.String(255))
     periodicidade = db.Column(db.String(20), nullable=False, default="mensal")
     esfera = db.Column(db.String(20), nullable=False, default="federal")
     dia_vencimento = db.Column(db.Integer)  # dia do mês de vencimento (informativo)
     ativo = db.Column(db.Boolean, default=True, nullable=False)
 
+    modulo = db.relationship("Modulo", back_populates="obrigacoes")
     regimes = db.relationship(
         "RegimeTributario", secondary=regime_obrigacao, back_populates="obrigacoes"
     )
+
+    __table_args__ = (db.UniqueConstraint("modulo_id", "nome"),)
 
     @property
     def periodicidade_label(self):
@@ -72,6 +105,8 @@ class Obrigacao(db.Model):
 
 
 class Empresa(db.Model):
+    """Cadastro do cliente — compartilhado por todos os módulos."""
+
     id = db.Column(db.Integer, primary_key=True)
     razao_social = db.Column(db.String(200), nullable=False)
     nome_fantasia = db.Column(db.String(200))
@@ -81,14 +116,13 @@ class Empresa(db.Model):
     email = db.Column(db.String(120))
     telefone = db.Column(db.String(30))
     regime_id = db.Column(db.Integer, db.ForeignKey("regime_tributario.id"), nullable=False)
-    responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
-    # Último mês (competência) com escrituração concluída — armazenado como dia 1 do mês.
-    escriturada_ate = db.Column(db.Date)
     observacoes = db.Column(db.Text)
     ativo = db.Column(db.Boolean, default=True, nullable=False)
 
     regime = db.relationship("RegimeTributario", back_populates="empresas")
-    responsavel = db.relationship("Responsavel", back_populates="empresas")
+    controles = db.relationship(
+        "EmpresaModulo", back_populates="empresa", cascade="all, delete-orphan"
+    )
     ajustes = db.relationship(
         "EmpresaObrigacaoAjuste", back_populates="empresa", cascade="all, delete-orphan"
     )
@@ -108,29 +142,38 @@ class Empresa(db.Model):
     def nome_exibicao(self):
         return self.nome_fantasia or self.razao_social
 
-    def meses_escrituracao_atrasada(self, hoje=None):
-        """Quantos meses faltam escriturar até o mês anterior a hoje."""
-        alvo = competencia_esperada("mensal", hoje or date.today())
-        if self.escriturada_ate is None:
-            return None
-        return max(0, meses_entre(self.escriturada_ate, alvo))
+    def controle(self, modulo, criar=False):
+        """Registro de responsável/andamento da empresa no módulo."""
+        for c in self.controles:
+            if c.modulo_id == modulo.id:
+                return c
+        if criar:
+            c = EmpresaModulo(modulo=modulo)
+            self.controles.append(c)
+            return c
+        return None
 
-    def obrigacoes_aplicaveis(self):
-        """Obrigações do regime + inclusões específicas − exclusões específicas (só ativas)."""
-        incluir = {a.obrigacao for a in self.ajustes if a.tipo == "incluir"}
-        excluir = {a.obrigacao for a in self.ajustes if a.tipo == "excluir"}
-        todas = (set(self.regime.obrigacoes) | incluir) - excluir
+    def obrigacoes_aplicaveis(self, modulo):
+        """Obrigações do módulo exigidas pelo regime + inclusões − exclusões (só ativas)."""
+        ajustes = [a for a in self.ajustes if a.obrigacao.modulo_id == modulo.id]
+        incluir = {a.obrigacao for a in ajustes if a.tipo == "incluir"}
+        excluir = {a.obrigacao for a in ajustes if a.tipo == "excluir"}
+        todas = (set(self.regime.obrigacoes_do_modulo(modulo)) | incluir) - excluir
         return sorted((o for o in todas if o.ativo), key=lambda o: o.nome)
 
     def ultima_entrega(self, obrigacao):
         entregas = [e for e in self.entregas if e.obrigacao_id == obrigacao.id]
         return max(entregas, key=lambda e: e.competencia, default=None)
 
-    def situacao_obrigacoes(self, hoje=None):
-        """Lista de dicts com a situação de cada obrigação aplicável."""
+    def entregas_do_modulo(self, modulo):
+        return [e for e in self.entregas if e.obrigacao.modulo_id == modulo.id]
+
+    def situacao_obrigacoes(self, modulo, hoje=None):
+        """Lista de dicts com a situação de cada obrigação aplicável no módulo."""
         hoje = hoje or date.today()
+        do_regime = set(self.regime.obrigacoes)
         resultado = []
-        for ob in self.obrigacoes_aplicaveis():
+        for ob in self.obrigacoes_aplicaveis(modulo):
             ultima = self.ultima_entrega(ob)
             esperada = competencia_esperada(ob.periodicidade, hoje)
             if esperada is None:
@@ -139,12 +182,37 @@ class Empresa(db.Model):
                 status = "em_dia"
             else:
                 status = "pendente"
-            origem = "regime" if ob in self.regime.obrigacoes else "específica"
-            resultado.append(
-                {"obrigacao": ob, "ultima": ultima, "esperada": esperada,
-                 "status": status, "origem": origem}
-            )
+            resultado.append({
+                "obrigacao": ob, "ultima": ultima, "esperada": esperada, "status": status,
+                "origem": "regime" if ob in do_regime else "específica",
+            })
         return resultado
+
+
+class EmpresaModulo(db.Model):
+    """Controle da empresa dentro de um módulo: quem cuida e até quando está concluído.
+
+    No Contábil, `concluido_ate` é o "escriturada até".
+    """
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False)
+    modulo_id = db.Column(db.Integer, db.ForeignKey("modulo.id"), nullable=False)
+    responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
+    concluido_ate = db.Column(db.Date)  # competência (dia 1 do mês)
+
+    empresa = db.relationship("Empresa", back_populates="controles")
+    modulo = db.relationship("Modulo")
+    responsavel = db.relationship("Responsavel", back_populates="controles")
+
+    __table_args__ = (db.UniqueConstraint("empresa_id", "modulo_id"),)
+
+    def meses_atrasados(self, hoje=None):
+        """Quantos meses faltam concluir até o mês anterior a hoje."""
+        if self.concluido_ate is None:
+            return None
+        alvo = competencia_esperada("mensal", hoje or date.today())
+        return max(0, meses_entre(self.concluido_ate, alvo))
 
 
 class EmpresaObrigacaoAjuste(db.Model):
