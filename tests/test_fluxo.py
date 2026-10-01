@@ -223,3 +223,12 @@ def test_lista_clientes_tem_dados_para_filtros(client, app):
     assert f'data-respcontabil="{resp_id}"' in html and f'data-regime="{regime_id}"' in html
     assert 'id="f-resp-contabil"' in html and 'id="f-regime"' in html and 'id="f-situacao"' in html
     assert '<option value="todas" selected>' in client.get("/empresas?inativas=1").get_data(as_text=True)
+
+
+def test_arquivos_estaticos_com_versao(client):
+    import re
+    html = client.get("/empresas").get_data(as_text=True)
+    m = re.search(r'href="(/static/app\.css\?v=[0-9a-f]{10})"', html)
+    assert m, "app.css deve ter ?v=<hash> para o navegador não usar cópia antiga"
+    assert re.search(r'/static/vendor/bootstrap\.bundle\.min\.js\?v=[0-9a-f]{10}', html)
+    assert client.get(m.group(1)).status_code == 200

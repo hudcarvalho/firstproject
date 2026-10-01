@@ -1,7 +1,8 @@
+import hashlib
 import os
 import secrets
 
-from flask import Flask
+from flask import Flask, url_for
 from flask_migrate import Migrate, stamp, upgrade
 from sqlalchemy import inspect
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -69,6 +70,19 @@ def create_app(config=None):
     @app.context_processor
     def modulos_no_menu():
         return {"modulos_ativos": Modulo.ativos()}
+
+    # Endereço dos arquivos estáticos com a "impressão digital" do conteúdo (?v=...), para o
+    # navegador baixar de novo sempre que o arquivo mudar em vez de usar a cópia em cache.
+    versoes = {}
+
+    def estatico(arquivo):
+        if arquivo not in versoes or app.debug:
+            caminho = os.path.join(app.static_folder, arquivo)
+            with open(caminho, "rb") as f:
+                versoes[arquivo] = hashlib.md5(f.read()).hexdigest()[:10]
+        return url_for("static", filename=arquivo, v=versoes[arquivo])
+
+    app.jinja_env.globals["estatico"] = estatico
 
     from .routes import bp
     app.register_blueprint(bp)
