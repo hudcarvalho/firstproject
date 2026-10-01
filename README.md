@@ -30,7 +30,6 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
 - **Tela da empresa**: situação de cada obrigação (última competência cumprida,
   competência esperada, em dia/pendente), atualização rápida da escrituração,
   registro de cumprimento de obrigações e histórico.
-- **Exceções por empresa**: incluir uma obrigação fora do regime ou dispensar uma do regime.
 - **Parametrização**:
   - Obrigações (nome, periodicidade, esfera, dia de vencimento, ativa/inativa);
   - Obrigações × Tributação (grade para marcar quais obrigações cada regime exige);
@@ -237,7 +236,7 @@ app/
   auth.py          # login, primeiro acesso, senhas, usuários e permissões
   cli.py           # comandos criar-admin e redefinir-senha
   models.py        # Modulo, Empresa, EmpresaModulo, RegimeTributario, Obrigacao,
-                   # Responsavel, Entrega, Usuario, ajustes por empresa
+                   # Responsavel, Entrega, Usuario, Socio, DistribuicaoLucro, GrupoEconomico
   competencia.py   # utilitários de competência e validação de CNPJ
   routes.py        # telas
   seed.py          # dados iniciais

@@ -149,16 +149,17 @@ def test_entrega_de_obrigacao_de_outro_modulo_e_recusada(client, app):
     assert "Preencha obrigação" in r.get_data(as_text=True)
 
 
-def test_ajustes_por_empresa(client, app):
+def test_sem_excecoes_por_empresa(client, app):
     eid = _cadastrar(client, app)
+    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert "Exceções desta empresa" not in html and "Dispensar" not in html
     with app.app_context():
         defis = Obrigacao.query.filter_by(nome="DEFIS").one().id
-        irpj = Obrigacao.query.filter_by(nome="ECF").one().id
-    client.post(f"/empresas/{eid}/contabil/ajustes", data={"tipo": "incluir", "obrigacao_id": defis})
-    client.post(f"/empresas/{eid}/contabil/ajustes", data={"tipo": "excluir", "obrigacao_id": irpj})
+    assert client.post(f"/empresas/{eid}/contabil/ajustes",
+                       data={"tipo": "incluir", "obrigacao_id": defis}).status_code in (404, 405)
     with app.app_context():
         nomes = {o.nome for o in db.session.get(Empresa, eid).obrigacoes_aplicaveis(_modulo("contabil"))}
-        assert "DEFIS" in nomes and "ECF" not in nomes
+        assert nomes == {"ECD", "ECF"}  # só o que a tributação (Lucro Presumido) exige
 
 
 def test_matriz_preserva_outros_modulos(client, app):
