@@ -232,3 +232,33 @@ def test_arquivos_estaticos_com_versao(client):
     assert m, "app.css deve ter ?v=<hash> para o navegador não usar cópia antiga"
     assert re.search(r'/static/vendor/bootstrap\.bundle\.min\.js\?v=[0-9a-f]{10}', html)
     assert client.get(m.group(1)).status_code == 200
+
+
+def test_grupo_economico(client, app):
+    from app.models import GrupoEconomico
+    with app.app_context():
+        rid = _regime("Lucro Presumido").id
+    base = {"regime_id": rid, "ativo": "on"}
+    client.post("/empresas/nova", data={**base, "razao_social": "ALFA", "cnpj": "11.222.333/0001-81", "grupo": "GRUPO  CONFECÇÕES"})
+    # mesmo grupo digitado com outra grafia (inclusive acentos minúsculos): reaproveita o existente
+    client.post("/empresas/nova", data={**base, "razao_social": "BETA", "cnpj": "11.444.777/0001-61", "grupo": "grupo confecções"})
+    client.post("/empresas/nova", data={**base, "razao_social": "GAMA", "cnpj": "45.997.418/0001-53"})
+    with app.app_context():
+        grupos = GrupoEconomico.query.all()
+        assert [g.nome for g in grupos] == ["GRUPO CONFECÇÕES"]
+        gid = grupos[0].id
+        alfa, beta, gama = (Empresa.query.filter_by(razao_social=n).one() for n in ("ALFA", "BETA", "GAMA"))
+        assert alfa.grupo_id == beta.grupo_id == gid and gama.grupo_id is None
+        alfa_id, beta_id = alfa.id, beta.id
+
+    html = client.get("/empresas").get_data(as_text=True)
+    assert 'id="f-grupo"' in html and f'<option value="{gid}">GRUPO CONFECÇÕES</option>' in html
+    assert html.count(f'data-grupo="{gid}"') == 2 and html.count('data-grupo="0"') == 1
+    # cabeçalho da empresa mostra o grupo com link para o filtro
+    assert f"/empresas?grupo={gid}" in client.get(f"/empresas/{alfa_id}/contabil").get_data(as_text=True)
+
+    # tirar as duas empresas do grupo apaga o grupo que ficou vazio
+    for eid, nome, cnpj in ((alfa_id, "ALFA", "11.222.333/0001-81"), (beta_id, "BETA", "11.444.777/0001-61")):
+        client.post(f"/empresas/{eid}/editar", data={**base, "razao_social": nome, "cnpj": cnpj, "grupo": ""})
+    with app.app_context():
+        assert GrupoEconomico.query.count() == 0

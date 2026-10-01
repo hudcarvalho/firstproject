@@ -11,8 +11,12 @@
     <div class="col-md-4"><label class="form-label">CNPJ *</label><input class="form-control" name="cnpj" id="cnpj" value="{{ empresa.cnpj_formatado if empresa.cnpj else '' }}" placeholder="00.000.000/0000-00" required></div>
     <div class="col-md-4"><label class="form-label">Inscrição estadual</label><input class="form-control" name="inscricao_estadual" value="{{ empresa.inscricao_estadual or '' }}"></div>
     <div class="col-md-4"><label class="form-label">Inscrição municipal</label><input class="form-control" name="inscricao_municipal" value="{{ empresa.inscricao_municipal or '' }}"></div>
-    <div class="col-md-6"><label class="form-label">E-mail</label><input type="email" class="form-control" name="email" value="{{ empresa.email or '' }}"></div>
-    <div class="col-md-6"><label class="form-label">Telefone</label><input class="form-control" name="telefone" value="{{ empresa.telefone or '' }}"></div>
+    <div class="col-md-4"><label class="form-label">E-mail</label><input type="email" class="form-control" name="email" value="{{ empresa.email or '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Telefone</label><input class="form-control" name="telefone" value="{{ empresa.telefone or '' }}"></div>
+    <div class="col-md-4"><label class="form-label">Grupo econômico</label>
+      <input class="form-control" name="grupo" list="lista-grupos" autocomplete="off" value="{{ empresa.grupo.nome if empresa.grupo else '' }}" placeholder="Nenhum">
+      <datalist id="lista-grupos">{% for g in grupos %}<option value="{{ g.nome }}"></option>{% endfor %}</datalist>
+      <div class="form-text">Escolha um grupo existente ou digite um nome novo para criá-lo.</div></div>
   </div>
 
   <h2 class="h6 text-uppercase text-muted">Tributação</h2>
