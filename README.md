@@ -39,7 +39,7 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   - Módulos (ativar/desativar e nome do controle de andamento);
   - Usuários.
 - **Login**: todo acesso exige usuário e senha (ver "Usuários e acesso").
-- **Distribuição de Lucros** (aba no menu): escolha do cliente por código ou nome; sócios
+- **Distribuição de Lucros** (aba na tela da empresa, ao lado de Contábil): sócios
   (nome, CPF/CNPJ validados e % de quotas, com soma dos ativos) com cadastro, inativação e reativação; grade com os 12 meses por
   sócio, total anual por sócio, total por mês e total geral, com seleção do ano.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
