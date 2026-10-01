@@ -41,6 +41,15 @@
   </div></div>
 </div>
 
+{% if 'grupo' in previa.colunas %}{% set grupos = previa.grupos() %}
+<div class="card mb-4">
+  <div class="card-header"><strong>Grupos econômicos</strong> — {{ grupos.values()|sum }} empresa(s) em {{ grupos|length }} grupo(s){% if previa.grupos_novos %}, {{ previa.grupos_novos|length }} novo(s){% endif %}</div>
+  <div class="card-body">
+    {% for nome, n in grupos.most_common() %}<span class="badge text-bg-light border me-1 mb-1">{{ nome }} <span class="text-muted">· {{ n }}</span>{% if nome in previa.grupos_novos %} <span class="text-info">novo</span>{% endif %}</span>{% endfor %}
+  </div>
+</div>
+{% endif %}
+
 {% set erros = previa.por_situacao('erro') %}
 {% if erros %}
 <div class="card mb-4 border-danger">
@@ -69,10 +78,10 @@
   <summary class="card-header"><strong>Ver todas as linhas ({{ previa.linhas|length }})</strong></summary>
   <div class="table-responsive" style="max-height: 480px">
   <table class="table table-sm align-middle mb-0">
-    <thead class="table-light sticky-top"><tr><th>Linha</th><th>Código</th><th>Nome</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>Situação</th></tr></thead>
+    <thead class="table-light sticky-top"><tr><th>Linha</th><th>Código</th><th>Nome</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>Grupo</th><th>Situação</th></tr></thead>
     {% for l in previa.linhas %}
     <tr><td>{{ l.linha }}</td><td>{{ l.codigo }}</td><td>{{ l.nome }}</td><td class="text-nowrap">{{ l.cnpj_formatado }}</td>
-      <td>{{ l.regime or 'A definir' }}</td><td>{{ l.responsavel or '—' }}</td>
+      <td>{{ l.regime or 'A definir' }}</td><td>{{ l.responsavel or '—' }}</td><td>{{ l.grupo or '' }}</td>
       <td>{% if l.situacao == 'nova' %}<span class="badge text-bg-success">nova</span>{% elif l.situacao == 'existente' %}<span class="badge text-bg-secondary">já cadastrada</span>{% else %}<span class="badge text-bg-danger">erro</span>{% endif %}</td></tr>
     {% endfor %}
   </table>
@@ -82,8 +91,23 @@
 <form method="post" action="{{ url_for('main.importar_confirmar', token=token) }}" class="card card-body"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <input type="hidden" name="aba" value="{{ aba }}">
   {% if cont['existente'] %}
-  <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="atualizar" id="atualizar">
-    <label class="form-check-label" for="atualizar">Atualizar as {{ cont['existente'] }} empresas já cadastradas com os dados da planilha (código, nome, tributação, responsável e observações)</label></div>
+  {% set tem_grupo = 'grupo' in previa.colunas %}
+  <div class="mb-3">
+    <div class="fw-semibold mb-1">Empresas já cadastradas ({{ cont['existente'] }})</div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="existentes" value="ignorar" id="ex-ignorar" {{ 'checked' if not tem_grupo }}>
+      <label class="form-check-label" for="ex-ignorar">Manter como estão</label></div>
+    {% if tem_grupo %}
+    <div class="form-check"><input class="form-check-input" type="radio" name="existentes" value="grupo" id="ex-grupo" checked>
+      <label class="form-check-label" for="ex-grupo">Atualizar <strong>somente o grupo econômico</strong>
+        ({{ previa.grupos_a_alterar()|length }} empresa(s) terão o grupo definido ou alterado; tributação, responsável e demais dados não mudam)</label></div>
+    {% endif %}
+    <div class="form-check"><input class="form-check-input" type="radio" name="existentes" value="tudo" id="ex-tudo">
+      <label class="form-check-label" for="ex-tudo">Atualizar todos os dados com a planilha (código, nome, tributação, responsável, observações{{ ' e grupo' if tem_grupo }})</label></div>
+  </div>
+  {% endif %}
+  {% if cont['nova'] %}
+  <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="pular_novas" id="pular-novas">
+    <label class="form-check-label" for="pular-novas">Não cadastrar as {{ cont['nova'] }} empresa(s) que ainda não estão no sistema (só atualizar as existentes)</label></div>
   {% endif %}
   <div class="d-flex gap-2">
     <button class="btn btn-success" onclick="this.disabled=true; this.form.submit();">Confirmar importação</button>

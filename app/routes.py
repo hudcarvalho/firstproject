@@ -171,7 +171,7 @@ def _form_empresa(empresa):
     empresa.telefone = f.get("telefone", "").strip() or None
     empresa.regime = regime
     empresa.observacoes = f.get("observacoes", "").strip() or None
-    empresa.grupo = _grupo_por_nome(f.get("grupo"))
+    empresa.grupo = GrupoEconomico.obter(f.get("grupo"))
     empresa.ativo = f.get("ativo") == "on"
 
     # Responsável e andamento por módulo ativo.
@@ -183,22 +183,6 @@ def _form_empresa(empresa):
         if bruto and controle.concluido_ate is None:
             erros.append(f"{m.nome}: competência inválida em “{m.rotulo_controle}”.")
     return erros
-
-
-def _grupo_por_nome(texto):
-    """Grupo econômico com esse nome (sem diferenciar maiúsculas); cria se ainda não existir."""
-    nome = " ".join((texto or "").split())
-    if not nome:
-        return None
-    # Compara em Python: o lower() do SQLite não trata letras acentuadas ("Ç", "Õ").
-    chave = nome.casefold()
-    grupo = next((g for g in GrupoEconomico.query if g.nome.casefold() == chave), None)
-    return grupo or GrupoEconomico(nome=nome)
-
-
-def _remover_grupos_vazios():
-    for grupo in GrupoEconomico.query.filter(~GrupoEconomico.empresas.any()):
-        db.session.delete(grupo)
 
 
 def _render_form_empresa(empresa):
@@ -217,7 +201,7 @@ def _salvar_form_empresa(empresa, nova):
         if nova:
             db.session.add(empresa)
         db.session.flush()
-        _remover_grupos_vazios()
+        GrupoEconomico.remover_vazios()
         db.session.commit()
         flash("Empresa cadastrada." if nova else "Empresa atualizada.", "success")
         return redirect(url_for("main.empresa_detalhe", id=empresa.id))
@@ -610,12 +594,19 @@ def importar_confirmar(token):
     if caminho is None:
         return redirect(url_for("main.importar"))
     previa, _, _ = _previa_importacao(caminho, request.form.get("aba"))
-    resultado = importacao.aplicar(previa, importacao.modulo_padrao(),
-                                   atualizar_existentes=request.form.get("atualizar") == "on")
+    modo = request.form.get("existentes")
+    if modo not in importacao.MODOS_EXISTENTES:
+        modo = "tudo" if request.form.get("atualizar") == "on" else "ignorar"
+    resultado = importacao.aplicar(previa, importacao.modulo_padrao(), modo_existentes=modo,
+                                   criar_novas=request.form.get("pular_novas") != "on")
     os.remove(caminho)
     partes = [f"{resultado['criadas']} empresa(s) cadastrada(s)"]
+    if resultado["novas_puladas"]:
+        partes.append(f"{resultado['novas_puladas']} nova(s) não cadastrada(s), como pedido")
     if resultado["atualizadas"]:
         partes.append(f"{resultado['atualizadas']} atualizada(s)")
+    if resultado["grupos"]:
+        partes.append(f"{resultado['grupos']} com grupo econômico definido")
     if resultado["ignoradas"]:
         partes.append(f"{resultado['ignoradas']} já existente(s) mantida(s)")
     if resultado["erros"]:

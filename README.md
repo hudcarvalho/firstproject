@@ -43,8 +43,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   (nome, CPF/CNPJ validados e % de quotas, com soma dos ativos) com cadastro, inativação e reativação; grade com os 12 meses por
   sócio, total anual por sócio, total por mês e total geral, com seleção do ano.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
-  .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável e
-  Observações. Mostra uma prévia antes de gravar; não duplica CNPJs já cadastrados; cria os
+  .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
+  Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o
+  grupo econômico ou atualizar tudo; opcionalmente não cadastra as novas. Mostra uma prévia
+  antes de gravar; não duplica CNPJs já cadastrados; responsável "NOVO" fica em branco; cria os
   responsáveis que não existirem; interpreta o regime (em mudanças como
   "SIMPLES/ PRESUMIDO EM 2026" vale o último) e usa "A definir" quando não dá para saber,
   guardando o texto original nas observações.

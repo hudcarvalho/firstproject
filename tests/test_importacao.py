@@ -144,3 +144,77 @@ def test_importacao_so_admin(anonimo, app):
     criar_usuario(app, "ana@x.com", admin=False)
     entrar(anonimo, "ana@x.com")
     assert anonimo.get("/importar").status_code == 403
+
+
+def _xlsx_grupos(linhas):
+    wb = openpyxl.Workbook()
+    ws = wb.active
+    ws.title = "PLANILHA NOVA"
+    ws.append(["Código", "RAZÃO SOCIAL", "CNPJ", "TRIBUTAÇÃO", "RESPONSÁVEL", "GRUPO ECONÔMICO"])
+    for linha in linhas:
+        ws.append(linha)
+    buf = io.BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return buf
+
+
+def test_importacao_grupo_economico(client, app):
+    from app.models import GrupoEconomico
+    # situação inicial: duas empresas já cadastradas (uma já com grupo "Grupo Antigo")
+    token = _enviar(client, _xlsx([[1, "ALFA LTDA", C1, "", "SIMPLES", "ANA", ""],
+                                   [2, "BETA LTDA", C2, "", "PRESUMIDO", "ANA", ""]])).split("/")[-1]
+    client.post(f"/importar/{token}/confirmar", data={})
+    with app.app_context():
+        beta = Empresa.query.filter_by(cnpj="11444777000161").one()
+        beta.grupo = GrupoEconomico.obter("Grupo Antigo")
+        db.session.commit()
+
+    # nova planilha: tributação/responsável diferentes, grupos e um responsável "NOVO"
+    planilha = _xlsx_grupos([
+        [1, "ALFA LTDA", C1, "REAL", "BRUNO", "TBB"],
+        [2, "BETA LTDA", C2, "REAL", "BRUNO", "tbb"],        # mesmo grupo, outra grafia
+        [3, "GAMA LTDA", C3, "SIMPLES", "NOVO", "MAGMA"],     # empresa nova, sem responsável
+        [4, "DELTA", C4, "SIMPLES", "ELLEN", ""],
+    ])
+    url = _enviar(client, planilha)
+    html = client.get(url).get_data(as_text=True)
+    assert "Grupos econômicos" in html and 'value="grupo" id="ex-grupo" checked' in html
+    assert "2 empresa(s) terão o grupo definido ou alterado" in html
+    assert "Responsável “NOVO” → sem responsável" in html
+
+    client.post(f"/importar/{url.split('/')[-1]}/confirmar", data={"existentes": "grupo"})
+    with app.app_context():
+        contabil = Modulo.query.filter_by(codigo="contabil").one()
+        e = {x.razao_social: x for x in Empresa.query}
+        # existentes: só o grupo mudou (tributação e responsável preservados)
+        assert e["ALFA LTDA"].grupo.nome == "TBB" and e["BETA LTDA"].grupo.nome == "TBB"
+        assert e["ALFA LTDA"].regime.nome == "Simples Nacional"
+        assert e["ALFA LTDA"].controle(contabil).responsavel.nome == "Ana"
+        # novas: criadas com grupo; "NOVO" não vira responsável
+        assert e["GAMA LTDA"].grupo.nome == "MAGMA" and e["GAMA LTDA"].controle(contabil) is None
+        assert "Responsável na planilha: NOVO" in e["GAMA LTDA"].observacoes
+        assert e["DELTA"].grupo is None
+        assert sorted(g.nome for g in GrupoEconomico.query) == ["MAGMA", "TBB"]  # "Grupo Antigo" ficou vazio
+        assert Responsavel.query.filter_by(nome="Novo").count() == 0
+
+
+def test_importacao_modo_manter(client, app):
+    token = _enviar(client, _xlsx([[1, "ALFA", C1, "", "SIMPLES", "", ""]])).split("/")[-1]
+    client.post(f"/importar/{token}/confirmar", data={})
+    token = _enviar(client, _xlsx_grupos([[1, "ALFA", C1, "REAL", "", "TBB"]])).split("/")[-1]
+    client.post(f"/importar/{token}/confirmar", data={"existentes": "ignorar"})
+    with app.app_context():
+        assert Empresa.query.one().grupo is None
+
+
+def test_importacao_sem_cadastrar_novas(client, app):
+    token = _enviar(client, _xlsx([[1, "ALFA", C1, "", "SIMPLES", "", ""]])).split("/")[-1]
+    client.post(f"/importar/{token}/confirmar", data={})
+    token = _enviar(client, _xlsx_grupos([[1, "ALFA", C1, "SIMPLES", "", "TBB"],
+                                          [2, "NOVA", C2, "SIMPLES", "", "TBB"]])).split("/")[-1]
+    r = client.post(f"/importar/{token}/confirmar", data={"existentes": "grupo", "pular_novas": "on"},
+                    follow_redirects=True)
+    assert "1 nova(s) não cadastrada(s)" in r.get_data(as_text=True)
+    with app.app_context():
+        assert Empresa.query.count() == 1 and Empresa.query.one().grupo.nome == "TBB"
