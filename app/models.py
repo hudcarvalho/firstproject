@@ -83,6 +83,29 @@ class GrupoEconomico(db.Model):
 
     empresas = db.relationship("Empresa", back_populates="grupo")
 
+    @staticmethod
+    def obter(texto, cache=None):
+        """Grupo com esse nome (sem diferenciar maiúsculas/acentos maiúsculos); cria se não existir.
+
+        Compara em Python: o lower() do SQLite não trata letras acentuadas ("Ç", "Õ").
+        `cache` (dict) evita consultas repetidas e reaproveita grupos criados na mesma operação.
+        """
+        nome = " ".join((texto or "").split())
+        if not nome:
+            return None
+        if cache is None:
+            cache = {g.nome.casefold(): g for g in GrupoEconomico.query}
+        chave = nome.casefold()
+        if chave not in cache:
+            cache[chave] = GrupoEconomico(nome=nome)
+            db.session.add(cache[chave])
+        return cache[chave]
+
+    @staticmethod
+    def remover_vazios():
+        for grupo in GrupoEconomico.query.filter(~GrupoEconomico.empresas.any()):
+            db.session.delete(grupo)
+
 
 class Responsavel(db.Model):
     id = db.Column(db.Integer, primary_key=True)

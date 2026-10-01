@@ -12,7 +12,7 @@ from collections import Counter
 from dataclasses import dataclass, field
 
 from .competencia import cnpj_valido, so_digitos
-from .models import Empresa, Modulo, RegimeTributario, Responsavel, db
+from .models import Empresa, GrupoEconomico, Modulo, RegimeTributario, Responsavel, db
 
 EXTENSOES = {".xls", ".xlsx", ".csv"}
 
@@ -26,6 +26,7 @@ CABECALHOS = {
     "cnpj": "cnpj", "cnpj/cpf": "cnpj", "documento": "cnpj",
     "regime": "regime", "tributacao": "regime", "regime tributario": "regime",
     "responsavel": "responsavel",
+    "grupo economico": "grupo", "grupo": "grupo", "grupo empresarial": "grupo",
     "observacoes": "observacoes", "observacao": "observacoes", "obs": "observacoes", "obs.": "observacoes",
 }
 
@@ -150,8 +151,14 @@ def _regime_direto(texto, regime):
     return diretos.get(t) == regime
 
 
+# Textos usados na planilha para "ainda sem responsável definido".
+RESPONSAVEL_PROVISORIO = {"novo", "nova", "-", "?", "a definir", "definir"}
+
+
 def interpretar_responsavel(texto):
     """(nome do responsável, texto original se havia mais de um)."""
+    if _normalizar(texto) in RESPONSAVEL_PROVISORIO:
+        return None, None
     partes = [p.strip() for p in re.split(r"[/;,]| e ", texto or "") if p.strip()]
     if not partes:
         return None, None
@@ -172,6 +179,8 @@ class LinhaPrevia:
     avisos: list = field(default_factory=list)
     erro: str | None = None
     empresa_id: int | None = None
+    grupo: str | None = None
+    grupo_atual: str | None = None  # grupo que a empresa já tem no sistema
 
     @property
     def cnpj_formatado(self):
@@ -185,6 +194,7 @@ class Previa:
     colunas: set
     regimes_novos: list
     responsaveis_novos: list
+    grupos_novos: list = field(default_factory=list)
 
     def contagem(self):
         return Counter(l.situacao for l in self.linhas)
@@ -194,6 +204,15 @@ class Previa:
 
     def com_avisos(self):
         return [l for l in self.linhas if l.avisos and l.situacao != "erro"]
+
+    def grupos(self):
+        """Counter grupo -> nº de empresas (linhas válidas com grupo)."""
+        return Counter(l.grupo for l in self.linhas if l.situacao != "erro" and l.grupo)
+
+    def grupos_a_alterar(self):
+        """Empresas já cadastradas cujo grupo será definido/alterado pela planilha."""
+        return [l for l in self.linhas if l.situacao == "existente" and l.grupo
+                and (l.grupo_atual or "").casefold() != l.grupo.casefold()]
 
     def regimes(self):
         return Counter(l.regime or REGIME_A_DEFINIR for l in self.linhas if l.situacao != "erro")
@@ -212,7 +231,8 @@ def analisar(registros, colunas):
         cnpj = so_digitos(reg.get("cnpj"))
         texto_regime = reg.get("regime", "")
         regime = interpretar_regime(texto_regime)
-        responsavel, resp_multiplo = interpretar_responsavel(reg.get("responsavel"))
+        texto_resp = reg.get("responsavel", "")
+        responsavel, resp_multiplo = interpretar_responsavel(texto_resp)
 
         notas = []
         avisos = []
@@ -221,6 +241,9 @@ def analisar(registros, colunas):
             avisos.append(f"Regime “{texto_regime}” → {regime or REGIME_A_DEFINIR}")
         elif not texto_regime and "regime" in colunas:
             avisos.append(f"Sem regime → {REGIME_A_DEFINIR}")
+        if texto_resp and responsavel is None:
+            notas.append(f"Responsável na planilha: {texto_resp}")
+            avisos.append(f"Responsável “{texto_resp}” → sem responsável")
         if resp_multiplo:
             notas.append(f"Responsável na planilha: {resp_multiplo}")
             avisos.append(f"Mais de um responsável; usado {responsavel}")
@@ -232,6 +255,7 @@ def analisar(registros, colunas):
             linha=reg["linha"], codigo=reg.get("codigo", ""), nome=reg.get("nome", ""),
             cnpj=cnpj, regime_original=texto_regime, regime=regime, responsavel=responsavel,
             observacoes=observacoes, situacao="nova", avisos=avisos,
+            grupo=" ".join(reg.get("grupo", "").split()) or None,
         )
         if not item.nome:
             item.situacao, item.erro = "erro", "Nome em branco"
@@ -243,6 +267,7 @@ def analisar(registros, colunas):
             item.situacao, item.erro = "erro", "CNPJ repetido na planilha"
         elif cnpj in existentes:
             item.situacao, item.empresa_id = "existente", existentes[cnpj].id
+            item.grupo_atual = existentes[cnpj].grupo.nome if existentes[cnpj].grupo else None
         vistos.add(cnpj)
         linhas.append(item)
 
@@ -250,7 +275,10 @@ def analisar(registros, colunas):
     regimes_novos = sorted({l.regime or REGIME_A_DEFINIR for l in validas} - regimes_cadastrados)
     responsaveis_novos = sorted({l.responsavel for l in validas if l.responsavel
                                  and _normalizar(l.responsavel) not in responsaveis_cadastrados})
-    return Previa(linhas, colunas, regimes_novos, responsaveis_novos)
+    grupos_cadastrados = {g.nome.casefold() for g in GrupoEconomico.query}
+    grupos_novos = sorted({l.grupo for l in validas if l.grupo
+                           and l.grupo.casefold() not in grupos_cadastrados}, key=str.casefold)
+    return Previa(linhas, colunas, regimes_novos, responsaveis_novos, grupos_novos)
 
 
 # ---------------------------------------------------------------- Gravação
@@ -280,40 +308,64 @@ def _obter_responsavel(nome, cache):
     return cache[chave]
 
 
-def aplicar(previa, modulo, atualizar_existentes=False):
-    """Grava a prévia. Retorna um Counter com o resultado."""
+MODOS_EXISTENTES = ("ignorar", "grupo", "tudo")
+
+
+def aplicar(previa, modulo, modo_existentes="ignorar", criar_novas=True):
+    """Grava a prévia. Retorna um Counter com o resultado.
+
+    modo_existentes (empresas cujo CNPJ já está cadastrado):
+      "ignorar" — não altera; "grupo" — só o grupo econômico; "tudo" — todos os dados.
+    criar_novas: cadastrar as empresas cujo CNPJ ainda não existe.
+    """
     regimes = {r.nome: r for r in RegimeTributario.query}
     responsaveis = {_normalizar(r.nome): r for r in Responsavel.query}
+    grupos = {g.nome.casefold(): g for g in GrupoEconomico.query}
     resultado = Counter()
     with db.session.no_autoflush:
-        _gravar_linhas(previa, modulo, atualizar_existentes, regimes, responsaveis, resultado)
+        for item in previa.linhas:
+            if item.situacao == "nova" and not criar_novas:
+                resultado["novas_puladas"] += 1
+                continue
+            _gravar_linha(item, modulo, modo_existentes, regimes, responsaveis, grupos, resultado)
+    db.session.flush()
+    GrupoEconomico.remover_vazios()
     db.session.commit()
     return resultado
 
 
-def _gravar_linhas(previa, modulo, atualizar_existentes, regimes, responsaveis, resultado):
-    for item in previa.linhas:
-        if item.situacao == "erro":
-            resultado["erros"] += 1
-            continue
-        if item.situacao == "existente":
-            if not atualizar_existentes:
+def _gravar_linha(item, modulo, modo, regimes, responsaveis, grupos, resultado):
+    if item.situacao == "erro":
+        resultado["erros"] += 1
+        return
+    if item.situacao == "existente":
+        empresa = db.session.get(Empresa, item.empresa_id)
+        if modo == "grupo":
+            if item.grupo and (empresa.grupo is None
+                               or empresa.grupo.nome.casefold() != item.grupo.casefold()):
+                empresa.grupo = GrupoEconomico.obter(item.grupo, grupos)
+                resultado["grupos"] += 1
+            else:
                 resultado["ignoradas"] += 1
-                continue
-            empresa = db.session.get(Empresa, item.empresa_id)
-            resultado["atualizadas"] += 1
-        else:
-            empresa = Empresa(cnpj=item.cnpj, ativo=True)
-            db.session.add(empresa)
-            resultado["criadas"] += 1
-        empresa.codigo = item.codigo or empresa.codigo
-        empresa.razao_social = item.nome
-        empresa.regime = _obter_regime(item.regime or REGIME_A_DEFINIR, regimes)
-        if item.observacoes:
-            empresa.observacoes = item.observacoes
-        if item.responsavel and modulo is not None:
-            empresa.controle(modulo, criar=True).responsavel = _obter_responsavel(
-                item.responsavel, responsaveis)
+            return
+        if modo != "tudo":
+            resultado["ignoradas"] += 1
+            return
+        resultado["atualizadas"] += 1
+    else:
+        empresa = Empresa(cnpj=item.cnpj, ativo=True)
+        db.session.add(empresa)
+        resultado["criadas"] += 1
+    empresa.codigo = item.codigo or empresa.codigo
+    empresa.razao_social = item.nome
+    empresa.regime = _obter_regime(item.regime or REGIME_A_DEFINIR, regimes)
+    if item.observacoes:
+        empresa.observacoes = item.observacoes
+    if item.grupo:
+        empresa.grupo = GrupoEconomico.obter(item.grupo, grupos)
+    if item.responsavel and modulo is not None:
+        empresa.controle(modulo, criar=True).responsavel = _obter_responsavel(
+            item.responsavel, responsaveis)
 
 
 def modulo_padrao():
