@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}Controle de Rotina{% endblock %} · Escritório Contábil</title>
-  <link href="{{ url_for('static', filename='vendor/bootstrap.min.css') }}" rel="stylesheet">
-  <link href="{{ url_for('static', filename='app.css') }}" rel="stylesheet">
+  <link href="{{ estatico('vendor/bootstrap.min.css') }}" rel="stylesheet">
+  <link href="{{ estatico('app.css') }}" rel="stylesheet">
 </head>
 <body>
 <nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4">
@@ -67,7 +67,7 @@
   {% endwith %}
   {% block content %}{% endblock %}
 </main>
-<script src="{{ url_for('static', filename='vendor/bootstrap.bundle.min.js') }}"></script>
+<script src="{{ estatico('vendor/bootstrap.bundle.min.js') }}"></script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
