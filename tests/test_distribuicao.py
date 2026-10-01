@@ -177,3 +177,6 @@ def test_icone_distribuicao_na_lista_de_clientes(client, app, empresas):
     assert f'class="icone-dist pendente" href="/distribuicao/{b}"' in html
     assert f"Distribuição de lucros {ano}: R$ 1.500,00" in html
     assert f"Sem distribuição de lucros lançada em {ano}" in html
+    # dados para o filtro "Com lançamento / Sem lançamento"
+    assert 'id="f-dist"' in html
+    assert html.count('data-dist="1"') == 1 and html.count('data-dist="0"') == 1
