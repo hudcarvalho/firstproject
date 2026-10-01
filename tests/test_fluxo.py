@@ -65,8 +65,7 @@ def test_cadastro_empresa_e_obrigacoes_do_regime(client, app):
     with app.app_context():
         e = db.session.get(Empresa, eid)
         nomes = {o.nome for o in e.obrigacoes_aplicaveis(_modulo("contabil"))}
-        assert {"Distribuição de Lucros", "IRPJ", "CSLL", "ECD", "ECF"} <= nomes
-        assert "DEFIS" not in nomes  # do Simples, não do Presumido
+        assert nomes == {"ECD", "ECF"}  # Lucro Presumido: só ECD e ECF (anuais)
         assert "PIS/COFINS" not in nomes  # do módulo Fiscal
         c = e.controle(_modulo("contabil"))
         assert c.concluido_ate == date(2026, 6, 1)
@@ -129,8 +128,8 @@ def _status(eid, obid):
 def test_entrega_deixa_obrigacao_em_dia(client, app):
     eid = _cadastrar(client, app)
     with app.app_context():
-        obid = Obrigacao.query.filter_by(nome="Distribuição de Lucros").one().id
-        esperada = competencia_esperada("mensal", date.today())
+        obid = Obrigacao.query.filter_by(nome="ECD").one().id
+        esperada = competencia_esperada("anual", date.today())
         assert _status(eid, obid) == "pendente"
     url = f"/empresas/{eid}/contabil/entregas"
     client.post(url, data={"obrigacao_id": obid, "competencia": f"{esperada:%Y-%m}"})
@@ -154,18 +153,18 @@ def test_ajustes_por_empresa(client, app):
     eid = _cadastrar(client, app)
     with app.app_context():
         defis = Obrigacao.query.filter_by(nome="DEFIS").one().id
-        irpj = Obrigacao.query.filter_by(nome="IRPJ").one().id
+        irpj = Obrigacao.query.filter_by(nome="ECF").one().id
     client.post(f"/empresas/{eid}/contabil/ajustes", data={"tipo": "incluir", "obrigacao_id": defis})
     client.post(f"/empresas/{eid}/contabil/ajustes", data={"tipo": "excluir", "obrigacao_id": irpj})
     with app.app_context():
         nomes = {o.nome for o in db.session.get(Empresa, eid).obrigacoes_aplicaveis(_modulo("contabil"))}
-        assert "DEFIS" in nomes and "IRPJ" not in nomes
+        assert "DEFIS" in nomes and "ECF" not in nomes
 
 
 def test_matriz_preserva_outros_modulos(client, app):
     with app.app_context():
         mei = _regime("MEI")
-        dist = Obrigacao.query.filter_by(nome="Distribuição de Lucros").one()
+        dist = Obrigacao.query.filter_by(nome="ECD").one()
         contabil = _modulo("contabil")
         vinculos = [f"{r.id}-{o.id}" for r in RegimeTributario.query
                     for o in r.obrigacoes if o.modulo_id == contabil.id]
@@ -175,7 +174,7 @@ def test_matriz_preserva_outros_modulos(client, app):
     client.post("/contabil/matriz", data={"vinculo": vinculos})
     with app.app_context():
         nomes_mei = {o.nome for o in db.session.get(RegimeTributario, mei_id).obrigacoes}
-        assert "Distribuição de Lucros" in nomes_mei and "DAS-MEI" in nomes_mei
+        assert "ECD" in nomes_mei and "DAS-MEI" in nomes_mei
         fiscais_depois = sum(len(r.obrigacoes_do_modulo(_modulo("fiscal"))) for r in RegimeTributario.query)
         assert fiscais_antes == fiscais_depois
 
@@ -262,3 +261,65 @@ def test_grupo_economico(client, app):
         client.post(f"/empresas/{eid}/editar", data={**base, "razao_social": nome, "cnpj": cnpj, "grupo": ""})
     with app.app_context():
         assert GrupoEconomico.query.count() == 0
+
+
+
+def test_obrigacoes_contabeis_por_tributacao(app):
+    with app.app_context():
+        contabil = _modulo("contabil")
+        def nomes(regime):
+            return {o.nome for o in _regime(regime).obrigacoes_do_modulo(contabil)}
+        assert nomes("Lucro Real") == {"ECD", "ECF", "IRPJ", "CSLL"}
+        assert nomes("Lucro Presumido") == {"ECD", "ECF"}
+        assert nomes("Simples Nacional") == {"ECD", "DEFIS"}
+        per = {o.nome: (o.periodicidade, o.controla_imposto) for o in contabil.obrigacoes}
+        assert per["IRPJ"] == ("trimestral", True) and per["CSLL"] == ("trimestral", True)
+        assert per["ECD"] == ("anual", False) and per["DEFIS"] == ("anual", False)
+
+
+def test_registro_irpj_com_imposto(client, app):
+    from decimal import Decimal
+    from app.models import Entrega
+    eid = _cadastrar(client, app, regime="Lucro Real")
+    with app.app_context():
+        irpj = Obrigacao.query.filter_by(nome="IRPJ").one().id
+        ecd = Obrigacao.query.filter_by(nome="ECD").one().id
+    url = f"/empresas/{eid}/contabil/entregas"
+    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert f'value="{irpj}" data-imposto="1" data-periodicidade="trimestral"' in html
+
+    # sem forma de pagamento: recusado
+    r = client.post(url, data={"obrigacao_id": irpj, "competencia": "2026-05"}, follow_redirects=True)
+    assert "forma de pagamento" in r.get_data(as_text=True)
+    # quota maior que o imposto: recusado
+    r = client.post(url, data={"obrigacao_id": irpj, "competencia": "2026-05", "forma_pagamento": "parcelado",
+                               "valor_imposto": "900", "valor_quota": "1.000"}, follow_redirects=True)
+    assert "não pode ser maior" in r.get_data(as_text=True)
+    # parcelado: competência de maio vira junho (fim do trimestre)
+    client.post(url, data={"obrigacao_id": irpj, "competencia": "2026-05", "forma_pagamento": "parcelado",
+                           "valor_imposto": "9.000,00", "valor_quota": "3.000,00"})
+    # quota única: valor da quota é ignorado
+    client.post(url, data={"obrigacao_id": irpj, "competencia": "2026-08", "forma_pagamento": "unica",
+                           "valor_imposto": "1.234,56", "valor_quota": "10"})
+    # obrigação anual: fica em dezembro, sem dados de imposto
+    client.post(url, data={"obrigacao_id": ecd, "competencia": "2025-04", "forma_pagamento": "unica",
+                           "valor_imposto": "50"})
+    with app.app_context():
+        ent = {(e.obrigacao.nome, e.competencia): e for e in Entrega.query}
+        par = ent[("IRPJ", date(2026, 6, 1))]
+        assert (par.forma_pagamento, par.valor_imposto, par.valor_quota) == ("parcelado", Decimal("9000.00"), Decimal("3000.00"))
+        uni = ent[("IRPJ", date(2026, 9, 1))]
+        assert (uni.forma_pagamento, uni.valor_imposto, uni.valor_quota) == ("unica", Decimal("1234.56"), None)
+        anual = ent[("ECD", date(2025, 12, 1))]
+        assert anual.forma_pagamento is None and anual.valor_imposto is None
+    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert "R$ 9.000,00 · Parcelado (quota R$ 3.000,00)" in html
+    assert "R$ 1.234,56 · Quota única" in html
+
+
+def test_obrigacao_marcada_como_imposto(client, app):
+    client.post("/contabil/obrigacoes/nova", data={
+        "nome": "IRPJ Estimativa", "periodicidade": "mensal", "esfera": "federal",
+        "controla_imposto": "on", "ativo": "on"})
+    with app.app_context():
+        assert Obrigacao.query.filter_by(nome="IRPJ Estimativa").one().controla_imposto

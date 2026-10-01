@@ -128,6 +128,8 @@ class Obrigacao(db.Model):
     periodicidade = db.Column(db.String(20), nullable=False, default="mensal")
     esfera = db.Column(db.String(20), nullable=False, default="federal")
     dia_vencimento = db.Column(db.Integer)  # dia do mês de vencimento (informativo)
+    # Recolhimento de imposto: o registro pede forma de pagamento, valor do imposto e da quota.
+    controla_imposto = db.Column(db.Boolean, default=False, nullable=False, server_default=db.false())
     ativo = db.Column(db.Boolean, default=True, nullable=False)
 
     modulo = db.relationship("Modulo", back_populates="obrigacoes")
@@ -287,12 +289,22 @@ class Entrega(db.Model):
     data_entrega = db.Column(db.Date, nullable=False, default=date.today)
     responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
     observacao = db.Column(db.String(255))
+    # Só para obrigações com controla_imposto (IRPJ, CSLL…)
+    forma_pagamento = db.Column(db.String(10))  # "unica" | "parcelado"
+    valor_imposto = db.Column(db.Numeric(14, 2))
+    valor_quota = db.Column(db.Numeric(14, 2))
 
     empresa = db.relationship("Empresa", back_populates="entregas")
     obrigacao = db.relationship("Obrigacao")
     responsavel = db.relationship("Responsavel")
 
     __table_args__ = (db.UniqueConstraint("empresa_id", "obrigacao_id", "competencia"),)
+
+    FORMAS_PAGAMENTO = {"unica": "Quota única", "parcelado": "Parcelado"}
+
+    @property
+    def forma_pagamento_label(self):
+        return self.FORMAS_PAGAMENTO.get(self.forma_pagamento, "")
 
 
 class Socio(db.Model):

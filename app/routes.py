@@ -19,7 +19,9 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from . import importacao
-from .competencia import cnpj_valido, parse_competencia, so_digitos
+from .competencia import (
+    cnpj_valido, competencia_do_periodo, parse_competencia, parse_valor, so_digitos,
+)
 from .models import (
     ESFERAS, PERIODICIDADES, DistribuicaoLucro, Empresa, GrupoEconomico, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
     RegimeTributario, Responsavel, Socio, db,
@@ -325,12 +327,19 @@ def entrega_nova(id, modulo):
     if obrigacao is None or obrigacao.modulo_id != modulo.id or comp is None or data_entrega is None:
         flash("Preencha obrigação, competência e data corretamente.", "danger")
         return destino
+    comp = competencia_do_periodo(obrigacao.periodicidade, comp)
 
-    db.session.add(Entrega(
+    entrega = Entrega(
         empresa=empresa, obrigacao=obrigacao, competencia=comp, data_entrega=data_entrega,
         responsavel_id=_int_or_none(f.get("responsavel_id")),
         observacao=f.get("observacao", "").strip() or None,
-    ))
+    )
+    if obrigacao.controla_imposto:
+        erro = _dados_imposto(entrega, f)
+        if erro:
+            flash(erro, "danger")
+            return destino
+    db.session.add(entrega)
     try:
         db.session.commit()
         flash(f"{obrigacao.nome} {comp:%m/%Y} registrada.", "success")
@@ -338,6 +347,24 @@ def entrega_nova(id, modulo):
         db.session.rollback()
         flash(f"{obrigacao.nome} {comp:%m/%Y} já estava registrada.", "warning")
     return destino
+
+
+def _dados_imposto(entrega, f):
+    """Forma de pagamento e valores de obrigações de recolhimento (IRPJ, CSLL…). Retorna erro."""
+    forma = f.get("forma_pagamento")
+    if forma not in Entrega.FORMAS_PAGAMENTO:
+        return "Informe a forma de pagamento (quota única ou parcelado)."
+    try:
+        imposto = parse_valor(f.get("valor_imposto"))
+        quota = parse_valor(f.get("valor_quota")) if forma == "parcelado" else None
+    except ValueError:
+        return "Valor do imposto ou da quota inválido. Use o formato 1.234,56."
+    if (imposto is not None and imposto < 0) or (quota is not None and quota < 0):
+        return "Os valores não podem ser negativos."
+    if imposto is not None and quota is not None and quota > imposto:
+        return "O valor da quota não pode ser maior que o valor do imposto."
+    entrega.forma_pagamento, entrega.valor_imposto, entrega.valor_quota = forma, imposto, quota
+    return None
 
 
 @bp.post("/entregas/<int:id>/remover")
@@ -397,6 +424,7 @@ def obrigacao_form(modulo, id):
             obrigacao.esfera = f["esfera"]
             obrigacao.dia_vencimento = dia
             obrigacao.ativo = f.get("ativo") == "on"
+            obrigacao.controla_imposto = f.get("controla_imposto") == "on"
             ids = {int(x) for x in f.getlist("regimes")}
             obrigacao.regimes = [r for r in regimes if r.id in ids]
             if not id:

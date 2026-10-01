@@ -55,6 +55,18 @@ def competencia_esperada(periodicidade, hoje):
     return None
 
 
+def competencia_do_periodo(periodicidade, d):
+    """Competência que representa o período da obrigação.
+
+    Trimestral: último mês do trimestre (fev/2026 -> mar/2026); anual: dezembro do ano.
+    """
+    if periodicidade == "trimestral":
+        return date(d.year, ((d.month - 1) // 3 + 1) * 3, 1)
+    if periodicidade == "anual":
+        return date(d.year, 12, 1)
+    return d
+
+
 def so_digitos(valor):
     return re.sub(r"\D", "", valor or "")
 
