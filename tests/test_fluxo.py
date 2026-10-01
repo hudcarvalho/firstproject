@@ -324,3 +324,20 @@ def test_obrigacao_marcada_como_imposto(client, app):
         "controla_imposto": "on", "ativo": "on"})
     with app.app_context():
         assert Obrigacao.query.filter_by(nome="IRPJ Estimativa").one().controla_imposto
+
+
+def test_observacoes_na_tela_da_empresa(client, app):
+    eid = _cadastrar(client, app)
+    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert 'id="form-observacoes"' in html
+    r = client.post(f"/empresas/{eid}/contabil/observacoes",
+                    data={"observacoes": "  Sócio prefere contato por e-mail.\nECD com termo especial.  "})
+    assert r.status_code == 302 and r.headers["Location"].endswith("#form-observacoes")
+    with app.app_context():
+        assert db.session.get(Empresa, eid).observacoes == "Sócio prefere contato por e-mail.\nECD com termo especial."
+    assert "Sócio prefere contato por e-mail." in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    # o mesmo campo do cadastro: aparece em "Editar cadastro"
+    assert "ECD com termo especial." in client.get(f"/empresas/{eid}/editar").get_data(as_text=True)
+    client.post(f"/empresas/{eid}/contabil/observacoes", data={"observacoes": "   "})
+    with app.app_context():
+        assert db.session.get(Empresa, eid).observacoes is None

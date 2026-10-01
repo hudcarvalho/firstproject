@@ -29,7 +29,8 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   **responsável** e competência concluída.
 - **Tela da empresa**: situação de cada obrigação (última competência cumprida,
   competência esperada, em dia/pendente), atualização rápida da escrituração,
-  registro de cumprimento de obrigações e histórico.
+  registro de cumprimento de obrigações, histórico e **observações** (particularidades da
+  empresa, editáveis na própria tela).
 - **Parametrização**:
   - Obrigações (nome, periodicidade, esfera, dia de vencimento, ativa/inativa);
   - Obrigações × Tributação (grade para marcar quais obrigações cada regime exige);
