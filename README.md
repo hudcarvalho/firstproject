@@ -25,7 +25,7 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   "escriturada até" (com indicador de atraso) e quantidade de obrigações pendentes.
   Filtros por responsável (inclusive "sem responsável"), tributação e busca por nome/CNPJ.
 - **Clientes (empresas)**: cadastro com razão social, nome fantasia, CNPJ (validado),
-  inscrições, contato, **tributação**, observações e, para cada módulo ativo,
+  inscrições, contato, **grupo econômico**, **tributação**, observações e, para cada módulo ativo,
   **responsável** e competência concluída.
 - **Tela da empresa**: situação de cada obrigação (última competência cumprida,
   competência esperada, em dia/pendente), atualização rápida da escrituração,

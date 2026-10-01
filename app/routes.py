@@ -21,7 +21,7 @@ from sqlalchemy.orm import selectinload
 from . import importacao
 from .competencia import cnpj_valido, parse_competencia, so_digitos
 from .models import (
-    ESFERAS, PERIODICIDADES, DistribuicaoLucro, Empresa, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
+    ESFERAS, PERIODICIDADES, DistribuicaoLucro, Empresa, GrupoEconomico, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
     RegimeTributario, Responsavel, Socio, db,
 )
 
@@ -54,6 +54,7 @@ def _com_relacionamentos(query):
     """Carrega de uma vez o que as listas de empresas usam (evita uma consulta por linha)."""
     return query.options(
         selectinload(Empresa.regime).selectinload(RegimeTributario.obrigacoes),
+        selectinload(Empresa.grupo),
         selectinload(Empresa.controles).selectinload(EmpresaModulo.responsavel),
         selectinload(Empresa.ajustes).selectinload(EmpresaObrigacaoAjuste.obrigacao),
         selectinload(Empresa.entregas),
@@ -127,6 +128,7 @@ def empresas_lista():
                  if c.modulo_id == m.id and c.responsavel}
         responsaveis[m.codigo] = sorted(nomes, key=lambda r: r.nome.lower())
     regimes = sorted({e.regime for e in empresas}, key=lambda r: r.nome.lower())
+    grupos = sorted({e.grupo for e in empresas if e.grupo}, key=lambda g: g.nome.lower())
     # Distribuição de lucros lançada no ano atual: {empresa_id: total}
     ano = date.today().year
     distribuido = dict(
@@ -137,7 +139,7 @@ def empresas_lista():
     )
     return render_template(
         "empresas/lista.html", empresas=empresas, modulos=modulos,
-        responsaveis=responsaveis, regimes=regimes, distribuido=distribuido, ano=ano,
+        responsaveis=responsaveis, regimes=regimes, grupos=grupos, distribuido=distribuido, ano=ano,
         # compatibilidade com o antigo link "Mostrar inativas"
         situacao_inicial="todas" if request.args.get("inativas") == "1" else "",
     )
@@ -169,6 +171,7 @@ def _form_empresa(empresa):
     empresa.telefone = f.get("telefone", "").strip() or None
     empresa.regime = regime
     empresa.observacoes = f.get("observacoes", "").strip() or None
+    empresa.grupo = _grupo_por_nome(f.get("grupo"))
     empresa.ativo = f.get("ativo") == "on"
 
     # Responsável e andamento por módulo ativo.
@@ -182,9 +185,26 @@ def _form_empresa(empresa):
     return erros
 
 
+def _grupo_por_nome(texto):
+    """Grupo econômico com esse nome (sem diferenciar maiúsculas); cria se ainda não existir."""
+    nome = " ".join((texto or "").split())
+    if not nome:
+        return None
+    # Compara em Python: o lower() do SQLite não trata letras acentuadas ("Ç", "Õ").
+    chave = nome.casefold()
+    grupo = next((g for g in GrupoEconomico.query if g.nome.casefold() == chave), None)
+    return grupo or GrupoEconomico(nome=nome)
+
+
+def _remover_grupos_vazios():
+    for grupo in GrupoEconomico.query.filter(~GrupoEconomico.empresas.any()):
+        db.session.delete(grupo)
+
+
 def _render_form_empresa(empresa):
     return render_template(
         "empresas/form.html", empresa=empresa, modulos=Modulo.ativos(),
+        grupos=GrupoEconomico.query.order_by(GrupoEconomico.nome).all(),
         regimes=RegimeTributario.query.filter_by(ativo=True).order_by(RegimeTributario.nome).all(),
         responsaveis=_responsaveis_ativos(),
     )
@@ -196,6 +216,8 @@ def _salvar_form_empresa(empresa, nova):
     if not erros:
         if nova:
             db.session.add(empresa)
+        db.session.flush()
+        _remover_grupos_vazios()
         db.session.commit()
         flash("Empresa cadastrada." if nova else "Empresa atualizada.", "success")
         return redirect(url_for("main.empresa_detalhe", id=empresa.id))

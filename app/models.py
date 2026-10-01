@@ -75,6 +75,15 @@ class RegimeTributario(db.Model):
         return [o for o in self.obrigacoes if o.modulo_id == modulo.id]
 
 
+class GrupoEconomico(db.Model):
+    """Empresas distintas (não filiais) que pertencem ao mesmo grupo de sócios/controle."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    nome = db.Column(db.String(120), unique=True, nullable=False)
+
+    empresas = db.relationship("Empresa", back_populates="grupo")
+
+
 class Responsavel(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     nome = db.Column(db.String(120), nullable=False)
@@ -127,10 +136,12 @@ class Empresa(db.Model):
     email = db.Column(db.String(120))
     telefone = db.Column(db.String(30))
     regime_id = db.Column(db.Integer, db.ForeignKey("regime_tributario.id"), nullable=False)
+    grupo_id = db.Column(db.Integer, db.ForeignKey("grupo_economico.id"), index=True)
     observacoes = db.Column(db.Text)
     ativo = db.Column(db.Boolean, default=True, nullable=False)
 
     regime = db.relationship("RegimeTributario", back_populates="empresas")
+    grupo = db.relationship("GrupoEconomico", back_populates="empresas")
     controles = db.relationship(
         "EmpresaModulo", back_populates="empresa", cascade="all, delete-orphan"
     )

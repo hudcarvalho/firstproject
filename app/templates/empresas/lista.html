@@ -19,6 +19,7 @@
   <thead>
     <tr class="titulos">
       <th style="width: 90px">Código</th><th>Razão social</th><th style="width: 170px">CNPJ</th>
+      <th style="width: 170px">Grupo econômico</th>
       <th style="width: 180px">Tributação</th>
       {% for m in modulos %}<th style="width: 160px">Resp. {{ m.nome }}</th>{% endfor %}
       <th style="width: 120px">Situação</th><th style="width: 70px"></th>
@@ -35,6 +36,11 @@
         <input type="search" class="form-control form-control-sm filtro" id="f-nome" data-param="nome" placeholder="Filtrar nome…" autocomplete="off" autofocus>
       </div></th>
       <th><input type="search" class="form-control form-control-sm filtro" id="f-cnpj" data-param="cnpj" placeholder="Filtrar…" autocomplete="off" inputmode="numeric"></th>
+      <th><select class="form-select form-select-sm filtro" id="f-grupo" data-param="grupo" data-campo="grupo">
+        <option value="">Todos</option>
+        <option value="0">— sem grupo —</option>
+        {% for g in grupos %}<option value="{{ g.id }}">{{ g.nome }}</option>{% endfor %}
+      </select></th>
       <th><select class="form-select form-select-sm filtro" id="f-regime" data-param="trib" data-campo="regime">
         <option value="">Todas</option>
         {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
@@ -57,20 +63,21 @@
   <tbody>
   {% for e in empresas %}
     <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-cnpj="{{ e.cnpj }}"
-        data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
+        data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
       <td>{% set total_dist = distribuido.get(e.id) %}<a class="icone-dist {{ 'ok' if total_dist else 'pendente' }}" href="{{ url_for('distribuicao.empresa', id=e.id) }}"
           title="{{ ('Distribuição de lucros ' ~ ano ~ ': R$ ' ~ (total_dist | valor)) if total_dist else ('Sem distribuição de lucros lançada em ' ~ ano) }} — abrir">$</a>
         <a href="{{ url_for('main.empresa_detalhe', id=e.id) }}">{{ e.razao_social }}</a>{% if e.nome_fantasia %}<div class="small text-muted">{{ e.nome_fantasia }}</div>{% endif %}</td>
       <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
+      <td>{{ e.grupo.nome if e.grupo else '' }}</td>
       <td class="text-nowrap">{{ e.regime.nome }}</td>
       {% for m in modulos %}{% set c = e.controle(m) %}<td>{{ c.responsavel.nome if c and c.responsavel else '—' }}</td>{% endfor %}
       <td>{{ badge_ativo(e.ativo) }}</td>
       <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.empresa_editar', id=e.id) }}">Editar</a></td>
     </tr>
   {% endfor %}
-  <tr id="busca-vazio" class="d-none"><td colspan="{{ 6 + modulos|length }}" class="text-center text-muted py-4">
+  <tr id="busca-vazio" class="d-none"><td colspan="{{ 7 + modulos|length }}" class="text-center text-muted py-4">
     {% if empresas %}Nenhum cliente encontrado com esses filtros.{% else %}Nenhuma empresa cadastrada.{% endif %}</td></tr>
   </tbody>
 </table>
