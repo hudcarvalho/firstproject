@@ -39,7 +39,9 @@
         <td>{{ o.periodicidade_label }}</td>
         <td>{{ o.esfera_label }}</td>
         <td class="text-nowrap">{{ 'dia ' ~ o.dia_vencimento if o.dia_vencimento else '—' }}</td>
-        <td>{% if s.ultima %}{{ s.ultima.competencia | competencia }} <span class="small text-muted">(em {{ s.ultima.data_entrega | data_br }})</span>{% else %}—{% endif %}</td>
+        <td>{% if s.ultima %}{{ s.ultima.competencia | competencia }} <span class="small text-muted">(em {{ s.ultima.data_entrega | data_br }})</span>
+          {% if s.ultima.forma_pagamento %}<div class="small text-muted">{% if s.ultima.valor_imposto is not none %}R$ {{ s.ultima.valor_imposto | valor }} · {% endif %}{{ s.ultima.forma_pagamento_label }}{% if s.ultima.valor_quota is not none %} (quota R$ {{ s.ultima.valor_quota | valor }}){% endif %}</div>{% endif %}
+        {% else %}—{% endif %}</td>
         <td>{{ s.esperada | competencia }}</td>
         <td>{{ badge_status(s.status) }}</td>
       </tr>
@@ -58,16 +60,28 @@
       <div class="card-body">
         <form method="post" action="{{ url_for('main.entrega_nova', id=empresa.id, modulo=modulo.codigo) }}" class="row g-2"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
           <div class="col-md-4"><label class="form-label small">Obrigação</label>
-            <select class="form-select" name="obrigacao_id" required>
-              {% for o in obrigacoes_aplicaveis %}<option value="{{ o.id }}">{{ o.nome }}</option>{% endfor %}
+            <select class="form-select" name="obrigacao_id" id="sel-obrigacao" required>
+              {% for o in obrigacoes_aplicaveis %}<option value="{{ o.id }}" data-imposto="{{ 1 if o.controla_imposto else 0 }}" data-periodicidade="{{ o.periodicidade }}">{{ o.nome }}</option>{% endfor %}
             </select></div>
-          <div class="col-md-3"><label class="form-label small">Competência</label><input type="month" class="form-control" name="competencia" required></div>
+          <div class="col-md-3"><label class="form-label small">Competência</label><input type="month" class="form-control" name="competencia" required>
+            <div class="form-text" id="dica-competencia"></div></div>
           <div class="col-md-3"><label class="form-label small">Data</label><input type="date" class="form-control" name="data_entrega" value="{{ hoje.isoformat() }}"></div>
           <div class="col-md-2"><label class="form-label small">Por</label>
             <select class="form-select" name="responsavel_id">
               <option value="">—</option>
               {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if controle and controle.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
             </select></div>
+          <div class="col-12 d-none" id="campos-imposto">
+            <div class="row g-2 p-2 rounded border bg-light">
+              <div class="col-md-5"><label class="form-label small">Forma de pagamento *</label>
+                <div class="d-flex gap-3 pt-1">
+                  <div class="form-check text-nowrap"><input class="form-check-input" type="radio" name="forma_pagamento" value="unica" id="fp-unica"><label class="form-check-label" for="fp-unica">Quota única</label></div>
+                  <div class="form-check"><input class="form-check-input" type="radio" name="forma_pagamento" value="parcelado" id="fp-parcelado"><label class="form-check-label" for="fp-parcelado">Parcelado</label></div>
+                </div></div>
+              <div class="col-md-4"><label class="form-label small">Valor do imposto (R$)</label><input class="form-control text-end" name="valor_imposto" inputmode="decimal" placeholder="0,00"></div>
+              <div class="col-md-3 d-none" id="campo-quota"><label class="form-label small">Valor da quota (R$)</label><input class="form-control text-end" name="valor_quota" inputmode="decimal" placeholder="0,00"></div>
+            </div>
+          </div>
           <div class="col-md-10"><input class="form-control" name="observacao" placeholder="Observação (opcional)"></div>
           <div class="col-md-2 d-grid"><button class="btn btn-success">Registrar</button></div>
         </form>
@@ -78,16 +92,18 @@
       <div class="card-header"><strong>Histórico</strong></div>
       <div class="table-responsive" style="max-height: 420px">
       <table class="table table-sm align-middle mb-0">
-        <thead class="table-light sticky-top"><tr><th>Competência</th><th>Obrigação</th><th>Data</th><th>Por</th><th>Obs.</th><th></th></tr></thead>
+        <thead class="table-light sticky-top"><tr><th>Competência</th><th>Obrigação</th><th>Data</th><th>Por</th><th>Imposto</th><th>Obs.</th><th></th></tr></thead>
         <tbody>
         {% for en in entregas %}
           <tr>
             <td>{{ en.competencia | competencia }}</td><td>{{ en.obrigacao.nome }}</td><td>{{ en.data_entrega | data_br }}</td>
-            <td>{{ en.responsavel.nome if en.responsavel else '—' }}</td><td class="small">{{ en.observacao or '' }}</td>
+            <td>{{ en.responsavel.nome if en.responsavel else '—' }}</td>
+            <td class="small text-nowrap">{% if en.forma_pagamento %}{% if en.valor_imposto is not none %}R$ {{ en.valor_imposto | valor }} · {% endif %}{{ en.forma_pagamento_label }}{% if en.valor_quota is not none %} (quota R$ {{ en.valor_quota | valor }}){% endif %}{% endif %}</td>
+            <td class="small">{{ en.observacao or '' }}</td>
             <td class="text-end"><form method="post" action="{{ url_for('main.entrega_remover', id=en.id) }}" onsubmit="return confirm('Remover este registro?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="btn btn-sm btn-link text-danger p-0">remover</button></form></td>
           </tr>
         {% else %}
-          <tr><td colspan="6" class="text-center text-muted py-3">Nenhum registro ainda.</td></tr>
+          <tr><td colspan="7" class="text-center text-muted py-3">Nenhum registro ainda.</td></tr>
         {% endfor %}
         </tbody>
       </table>
@@ -141,4 +157,32 @@
     </div>
   </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(function () {
+  const sel = document.getElementById('sel-obrigacao');
+  if (!sel) return;
+  const campos = document.getElementById('campos-imposto');
+  const quota = document.getElementById('campo-quota');
+  const dica = document.getElementById('dica-competencia');
+  const radios = document.querySelectorAll('input[name=forma_pagamento]');
+  const DICAS = {
+    trimestral: 'Trimestral: informe um mês do trimestre (fica registrado no último: 03, 06, 09 ou 12).',
+    anual: 'Anual: informe um mês do ano (fica registrado como 12/ano).',
+  };
+  function atualizar() {
+    const op = sel.options[sel.selectedIndex];
+    const imposto = op && op.dataset.imposto === '1';
+    campos.classList.toggle('d-none', !imposto);
+    radios.forEach(r => { r.required = imposto; });
+    quota.classList.toggle('d-none', !(imposto && document.getElementById('fp-parcelado').checked));
+    dica.textContent = (op && DICAS[op.dataset.periodicidade]) || '';
+  }
+  sel.addEventListener('change', atualizar);
+  radios.forEach(r => r.addEventListener('change', atualizar));
+  atualizar();
+})();
+</script>
 {% endblock %}

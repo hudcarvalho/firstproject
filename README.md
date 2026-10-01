@@ -52,9 +52,19 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   guardando o texto original nas observações.
 
 Na primeira execução o banco é criado com os regimes (Simples Nacional, Lucro
-Presumido, Lucro Real, MEI, Imune/Isenta) e um conjunto de obrigações de exemplo
-(Distribuição de Lucros, IRPJ, CSLL, PIS/COFINS, DCTFWeb, EFD-Reinf, ECD, ECF, DEFIS…),
-todos editáveis pelas telas.
+Presumido, Lucro Real, MEI, Imune/Isenta) e as obrigações, todos editáveis pelas telas.
+No módulo Contábil:
+
+| Tributação | Obrigações |
+|---|---|
+| Lucro Real (e Lucro Real Trimestral) | ECD e ECF (anuais); IRPJ e CSLL (trimestrais) |
+| Lucro Presumido | ECD e ECF (anuais) |
+| Simples Nacional | ECD e DEFIS (anuais) |
+
+IRPJ e CSLL são marcadas como **recolhimento de imposto**: ao registrar, o sistema pede a
+forma de pagamento (quota única ou parcelado), o valor do imposto e, se parcelado, o valor da
+quota. Obrigações trimestrais ficam registradas no último mês do trimestre e as anuais em
+dezembro, qualquer que seja o mês informado.
 
 ### Como a situação "em dia / pendente" é calculada
 

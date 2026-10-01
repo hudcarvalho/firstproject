@@ -18,6 +18,7 @@
           <div class="form-check"><input class="form-check-input" type="checkbox" name="regimes" value="{{ r.id }}" id="r{{ r.id }}" {{ 'checked' if r in obrigacao.regimes }}><label class="form-check-label" for="r{{ r.id }}">{{ r.nome }}</label></div>
         {% endfor %}
       </div></div>
+    <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="controla_imposto" id="controla_imposto" {{ 'checked' if obrigacao.controla_imposto }}><label class="form-check-label" for="controla_imposto">Recolhimento de imposto (ao registrar, pede forma de pagamento — quota única ou parcelado —, valor do imposto e da quota)</label></div>
     <div class="col-12 form-check ms-2"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if obrigacao.ativo }}><label class="form-check-label" for="ativo">Ativa</label></div>
   </div>
   <div class="d-flex gap-2 mt-3"><button class="btn btn-primary">Salvar</button><a class="btn btn-outline-secondary" href="{{ url_for('main.obrigacoes_lista', modulo=modulo.codigo) }}">Cancelar</a></div>

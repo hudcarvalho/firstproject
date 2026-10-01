@@ -22,19 +22,22 @@ REGIMES = [
 
 SN, LP, LR, MEI, IMU = (r[0] for r in REGIMES)
 
+# Obrigações cujo registro pede forma de pagamento e valores (quota única ou parcelado).
+OBRIGACOES_COM_IMPOSTO = {"IRPJ", "CSLL"}
+
 # módulo -> [(nome, descrição, periodicidade, esfera, dia_vencimento, regimes)]
 # As obrigações dos módulos ainda inativos já ficam cadastradas para quando forem ligados.
 OBRIGACOES = {
     "contabil": [
-        ("Distribuição de Lucros", "Apuração e registro da distribuição de lucros aos sócios",
-         "mensal", "interna", None, [SN, LP, LR]),
-        ("IRPJ", "Apuração e recolhimento do IRPJ (DARF)", "trimestral", "federal", None, [LP, LR]),
-        ("CSLL", "Apuração e recolhimento da CSLL (DARF)", "trimestral", "federal", None, [LP, LR]),
         ("ECD", "Escrituração Contábil Digital (SPED Contábil)", "anual", "federal", None,
-         [LP, LR, IMU]),
+         [SN, LP, LR, IMU]),
         ("ECF", "Escrituração Contábil Fiscal", "anual", "federal", None, [LP, LR, IMU]),
         ("DEFIS", "Declaração de informações socioeconômicas e fiscais", "anual", "federal", None,
          [SN]),
+        ("IRPJ", "Apuração e recolhimento do IRPJ (quota única ou parcelado)", "trimestral",
+         "federal", None, [LR]),
+        ("CSLL", "Apuração e recolhimento da CSLL (quota única ou parcelado)", "trimestral",
+         "federal", None, [LR]),
     ],
     "fiscal": [
         ("PIS/COFINS", "Apuração e recolhimento de PIS e COFINS", "mensal", "federal", 25, [LP, LR]),
@@ -78,5 +81,6 @@ def seed():
             db.session.add(Obrigacao(
                 modulo=modulos[codigo], nome=nome, descricao=desc, periodicidade=per, esfera=esf,
                 dia_vencimento=dia, regimes=[regimes[r] for r in rs],
+                controla_imposto=nome in OBRIGACOES_COM_IMPOSTO,
             ))
     db.session.commit()
