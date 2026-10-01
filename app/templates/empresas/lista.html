@@ -52,7 +52,9 @@
         data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
-      <td><a href="{{ url_for('main.empresa_detalhe', id=e.id) }}">{{ e.razao_social }}</a>{% if e.nome_fantasia %}<div class="small text-muted">{{ e.nome_fantasia }}</div>{% endif %}</td>
+      <td>{% set total_dist = distribuido.get(e.id) %}<a class="icone-dist {{ 'ok' if total_dist else 'pendente' }}" href="{{ url_for('distribuicao.empresa', id=e.id) }}"
+          title="{{ ('Distribuição de lucros ' ~ ano ~ ': R$ ' ~ (total_dist | valor)) if total_dist else ('Sem distribuição de lucros lançada em ' ~ ano) }} — abrir">$</a>
+        <a href="{{ url_for('main.empresa_detalhe', id=e.id) }}">{{ e.razao_social }}</a>{% if e.nome_fantasia %}<div class="small text-muted">{{ e.nome_fantasia }}</div>{% endif %}</td>
       <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
       <td class="text-nowrap">{{ e.regime.nome }}</td>
       {% for m in modulos %}{% set c = e.controle(m) %}<td>{{ c.responsavel.nome if c and c.responsavel else '—' }}</td>{% endfor %}

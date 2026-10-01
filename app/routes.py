@@ -14,14 +14,15 @@ from datetime import date
 from flask import (
     Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
 )
+from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
 from . import importacao
 from .competencia import cnpj_valido, parse_competencia, so_digitos
 from .models import (
-    ESFERAS, PERIODICIDADES, Empresa, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
-    RegimeTributario, Responsavel, db,
+    ESFERAS, PERIODICIDADES, DistribuicaoLucro, Empresa, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
+    RegimeTributario, Responsavel, Socio, db,
 )
 
 bp = Blueprint("main", __name__)
@@ -126,9 +127,17 @@ def empresas_lista():
                  if c.modulo_id == m.id and c.responsavel}
         responsaveis[m.codigo] = sorted(nomes, key=lambda r: r.nome.lower())
     regimes = sorted({e.regime for e in empresas}, key=lambda r: r.nome.lower())
+    # Distribuição de lucros lançada no ano atual: {empresa_id: total}
+    ano = date.today().year
+    distribuido = dict(
+        db.session.query(Socio.empresa_id, func.sum(DistribuicaoLucro.valor))
+        .join(DistribuicaoLucro, DistribuicaoLucro.socio_id == Socio.id)
+        .filter(DistribuicaoLucro.ano == ano)
+        .group_by(Socio.empresa_id)
+    )
     return render_template(
         "empresas/lista.html", empresas=empresas, modulos=modulos,
-        responsaveis=responsaveis, regimes=regimes,
+        responsaveis=responsaveis, regimes=regimes, distribuido=distribuido, ano=ano,
         # compatibilidade com o antigo link "Mostrar inativas"
         situacao_inicial="todas" if request.args.get("inativas") == "1" else "",
     )

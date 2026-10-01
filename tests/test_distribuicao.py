@@ -161,3 +161,19 @@ def test_quotas_dos_socios(client, app, empresas):
     client.post(f"{url}/quotas", data={f"pct-{bruno_id}": ""})
     with app.app_context():
         assert db.session.get(Socio, bruno_id).percentual is None
+
+
+def test_icone_distribuicao_na_lista_de_clientes(client, app, empresas):
+    from datetime import date
+    a, b = empresas
+    client.post(f"/distribuicao/{a}/socios", data={"nome": "Ana", "documento": CPF1})
+    with app.app_context():
+        socio = Socio.query.filter_by(empresa_id=a).one().id
+    ano = date.today().year
+    client.post(f"/distribuicao/{a}?ano={ano}", data={f"v-{socio}-1": "1.500,00"})
+    client.post(f"/distribuicao/{a}?ano={ano - 1}", data={f"v-{socio}-2": "999"})  # outro ano não conta
+    html = client.get("/empresas").get_data(as_text=True)
+    assert f'class="icone-dist ok" href="/distribuicao/{a}"' in html
+    assert f'class="icone-dist pendente" href="/distribuicao/{b}"' in html
+    assert f"Distribuição de lucros {ano}: R$ 1.500,00" in html
+    assert f"Sem distribuição de lucros lançada em {ano}" in html
