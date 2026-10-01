@@ -20,3 +20,4 @@ body { background: #f5f6f8; }
 .icone-dist.ok { background: #198754; }
 .icone-dist.pendente { background: #dc3545; }
 .icone-dist:hover { color: #fff; filter: brightness(1.15); }
+.planilha .filtro-dist { flex: 0 0 auto; width: 12.5rem; }

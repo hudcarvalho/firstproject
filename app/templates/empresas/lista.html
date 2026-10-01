@@ -25,7 +25,15 @@
     </tr>
     <tr class="filtros" id="filtros">
       <th><input type="search" class="form-control form-control-sm filtro" id="f-codigo" data-param="cod" placeholder="Filtrar…" autocomplete="off"></th>
-      <th><input type="search" class="form-control form-control-sm filtro" id="f-nome" data-param="nome" placeholder="Filtrar nome…" autocomplete="off" autofocus></th>
+      <th><div class="input-group input-group-sm">
+        <select class="form-select form-select-sm filtro filtro-dist" id="f-dist" data-param="dist" data-campo="dist"
+                title="Distribuição de lucros em {{ ano }}">
+          <option value="">$ Todos</option>
+          <option value="1">🟢 Com lançamento</option>
+          <option value="0">🔴 Sem lançamento</option>
+        </select>
+        <input type="search" class="form-control form-control-sm filtro" id="f-nome" data-param="nome" placeholder="Filtrar nome…" autocomplete="off" autofocus>
+      </div></th>
       <th><input type="search" class="form-control form-control-sm filtro" id="f-cnpj" data-param="cnpj" placeholder="Filtrar…" autocomplete="off" inputmode="numeric"></th>
       <th><select class="form-select form-select-sm filtro" id="f-regime" data-param="trib" data-campo="regime">
         <option value="">Todas</option>
@@ -49,7 +57,7 @@
   <tbody>
   {% for e in empresas %}
     <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-cnpj="{{ e.cnpj }}"
-        data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
+        data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
       <td>{% set total_dist = distribuido.get(e.id) %}<a class="icone-dist {{ 'ok' if total_dist else 'pendente' }}" href="{{ url_for('distribuicao.empresa', id=e.id) }}"
