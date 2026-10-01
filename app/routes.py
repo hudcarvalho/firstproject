@@ -259,6 +259,16 @@ def empresa_modulo(id, modulo):
     )
 
 
+@bp.post("/empresas/<int:id>/<modulo>/observacoes")
+def empresa_observacoes(id, modulo):
+    empresa = _get(Empresa, id)
+    modulo = _modulo(modulo)
+    empresa.observacoes = (request.form.get("observacoes") or "").strip() or None
+    db.session.commit()
+    flash("Observações salvas.", "success")
+    return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo) + "#form-observacoes")
+
+
 @bp.post("/empresas/<int:id>/<modulo>/controle")
 def empresa_controle(id, modulo):
     empresa = _get(Empresa, id)

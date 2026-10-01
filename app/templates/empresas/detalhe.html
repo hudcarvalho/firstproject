@@ -109,6 +109,17 @@
       </table>
       </div>
     </div>
+
+    <form method="post" action="{{ url_for('main.empresa_observacoes', id=empresa.id, modulo=modulo.codigo) }}" class="card mt-4" id="form-observacoes"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="card-header d-flex justify-content-between align-items-center">
+        <strong>Observações</strong>
+        <span class="small text-muted">Particularidades desta empresa</span>
+      </div>
+      <div class="card-body">
+        <textarea class="form-control" name="observacoes" rows="5" placeholder="Ex.: sócio prefere contato por e-mail; ECD com termo de abertura especial…">{{ empresa.observacoes or '' }}</textarea>
+        <div class="d-flex justify-content-end mt-2"><button class="btn btn-primary">Salvar observações</button></div>
+      </div>
+    </form>
   </div>
 
   <div class="col-lg-5">
@@ -120,7 +131,6 @@
           <dt class="col-5">Inscr. municipal</dt><dd class="col-7">{{ empresa.inscricao_municipal or '—' }}</dd>
           <dt class="col-5">E-mail</dt><dd class="col-7">{{ empresa.email or '—' }}</dd>
           <dt class="col-5">Telefone</dt><dd class="col-7">{{ empresa.telefone or '—' }}</dd>
-          <dt class="col-5">Observações</dt><dd class="col-7" style="white-space: pre-wrap">{{ empresa.observacoes or '—' }}</dd>
         </dl>
       </div>
     </div>
