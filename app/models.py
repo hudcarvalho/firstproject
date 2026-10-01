@@ -204,12 +204,9 @@ class Empresa(db.Model):
         return None
 
     def obrigacoes_aplicaveis(self, modulo):
-        """Obrigações do módulo exigidas pelo regime + inclusões − exclusões (só ativas)."""
-        ajustes = [a for a in self.ajustes if a.obrigacao.modulo_id == modulo.id]
-        incluir = {a.obrigacao for a in ajustes if a.tipo == "incluir"}
-        excluir = {a.obrigacao for a in ajustes if a.tipo == "excluir"}
-        todas = (set(self.regime.obrigacoes_do_modulo(modulo)) | incluir) - excluir
-        return sorted((o for o in todas if o.ativo), key=lambda o: o.nome)
+        """Obrigações ativas do módulo exigidas pela tributação (regime) da empresa."""
+        return sorted((o for o in self.regime.obrigacoes_do_modulo(modulo) if o.ativo),
+                      key=lambda o: o.nome)
 
     def ultima_entrega(self, obrigacao):
         entregas = [e for e in self.entregas if e.obrigacao_id == obrigacao.id]
@@ -221,7 +218,6 @@ class Empresa(db.Model):
     def situacao_obrigacoes(self, modulo, hoje=None):
         """Lista de dicts com a situação de cada obrigação aplicável no módulo."""
         hoje = hoje or date.today()
-        do_regime = set(self.regime.obrigacoes)
         resultado = []
         for ob in self.obrigacoes_aplicaveis(modulo):
             ultima = self.ultima_entrega(ob)
@@ -234,7 +230,6 @@ class Empresa(db.Model):
                 status = "pendente"
             resultado.append({
                 "obrigacao": ob, "ultima": ultima, "esperada": esperada, "status": status,
-                "origem": "regime" if ob in do_regime else "específica",
             })
         return resultado
 
@@ -266,7 +261,8 @@ class EmpresaModulo(db.Model):
 
 
 class EmpresaObrigacaoAjuste(db.Model):
-    """Exceção por empresa: inclui uma obrigação fora do regime ou exclui uma do regime."""
+    """Exceção por empresa (incluir/dispensar obrigação). Recurso removido das telas em out/2026:
+    as obrigações vêm só da tributação. A tabela fica para não perder registros antigos."""
 
     id = db.Column(db.Integer, primary_key=True)
     empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False)

@@ -23,7 +23,7 @@ from .competencia import (
     cnpj_valido, competencia_do_periodo, parse_competencia, parse_valor, so_digitos,
 )
 from .models import (
-    ESFERAS, PERIODICIDADES, DistribuicaoLucro, Empresa, GrupoEconomico, EmpresaModulo, EmpresaObrigacaoAjuste, Entrega, Modulo, Obrigacao,
+    ESFERAS, PERIODICIDADES, DistribuicaoLucro, Empresa, GrupoEconomico, EmpresaModulo, Entrega, Modulo, Obrigacao,
     RegimeTributario, Responsavel, Socio, db,
 )
 
@@ -58,7 +58,6 @@ def _com_relacionamentos(query):
         selectinload(Empresa.regime).selectinload(RegimeTributario.obrigacoes),
         selectinload(Empresa.grupo),
         selectinload(Empresa.controles).selectinload(EmpresaModulo.responsavel),
-        selectinload(Empresa.ajustes).selectinload(EmpresaObrigacaoAjuste.obrigacao),
         selectinload(Empresa.entregas),
     )
 
@@ -249,20 +248,13 @@ def empresa_modulo(id, modulo):
     modulo = _modulo(modulo)
     hoje = date.today()
     controle = empresa.controle(modulo)
-    ajustes = [a for a in empresa.ajustes if a.obrigacao.modulo_id == modulo.id]
-    ids_ajustados = {a.obrigacao_id for a in ajustes}
-    do_regime = empresa.regime.obrigacoes_do_modulo(modulo)
-    ids_regime = {o.id for o in do_regime}
     return render_template(
         "empresas/detalhe.html", empresa=empresa, modulo=modulo, modulos=Modulo.ativos(),
-        hoje=hoje, controle=controle, ajustes=ajustes,
+        hoje=hoje, controle=controle,
         atraso=controle.meses_atrasados(hoje) if controle else None,
         situacao=empresa.situacao_obrigacoes(modulo, hoje),
         entregas=empresa.entregas_do_modulo(modulo),
         obrigacoes_aplicaveis=empresa.obrigacoes_aplicaveis(modulo),
-        podem_incluir=[o for o in modulo.obrigacoes
-                       if o.ativo and o.id not in ids_regime and o.id not in ids_ajustados],
-        podem_excluir=[o for o in do_regime if o.id not in ids_ajustados],
         responsaveis=_responsaveis_ativos(),
     )
 
@@ -279,37 +271,6 @@ def empresa_controle(id, modulo):
         db.session.commit()
         flash(f"{modulo.rotulo_controle} {comp:%m/%Y}.", "success")
     return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
-
-
-@bp.post("/empresas/<int:id>/<modulo>/ajustes")
-def empresa_ajuste_novo(id, modulo):
-    empresa = _get(Empresa, id)
-    modulo = _modulo(modulo)
-    tipo = request.form.get("tipo")
-    obrigacao = db.session.get(Obrigacao, _int_or_none(request.form.get("obrigacao_id")) or 0)
-    if tipo not in ("incluir", "excluir") or obrigacao is None or obrigacao.modulo_id != modulo.id:
-        flash("Ajuste inválido.", "danger")
-    else:
-        db.session.add(EmpresaObrigacaoAjuste(empresa=empresa, obrigacao=obrigacao, tipo=tipo))
-        try:
-            db.session.commit()
-            flash("Ajuste registrado.", "success")
-        except IntegrityError:
-            db.session.rollback()
-            flash("Já existe um ajuste para essa obrigação.", "warning")
-    return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
-
-
-@bp.post("/empresas/<int:id>/ajustes/<int:ajuste_id>/remover")
-def empresa_ajuste_remover(id, ajuste_id):
-    ajuste = _get(EmpresaObrigacaoAjuste, ajuste_id)
-    if ajuste.empresa_id != id:
-        abort(404)
-    codigo = ajuste.obrigacao.modulo.codigo
-    db.session.delete(ajuste)
-    db.session.commit()
-    flash("Ajuste removido.", "success")
-    return redirect(url_for("main.empresa_modulo", id=id, modulo=codigo))
 
 
 @bp.post("/empresas/<int:id>/<modulo>/entregas")
