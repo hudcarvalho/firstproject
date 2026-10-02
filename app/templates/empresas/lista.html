@@ -121,6 +121,24 @@
   }));
   const plural = n => n + ' cliente' + (n === 1 ? '' : 's');
 
+  // Guarda o endereço (filtros e ordem) e a rolagem para o botão "Voltar aos clientes".
+  const caixa = document.querySelector('.planilha');
+  function lembrar() {
+    try {
+      sessionStorage.setItem('clientes-url', location.pathname + location.search);
+      sessionStorage.setItem('clientes-rolagem', JSON.stringify([caixa.scrollTop, window.scrollY]));
+    } catch (e) {}
+  }
+  let retomar = null;  // voltando pelo botão: retoma a rolagem de onde parou
+  try {
+    if (sessionStorage.getItem('clientes-voltar')) {
+      sessionStorage.removeItem('clientes-voltar');
+      retomar = JSON.parse(sessionStorage.getItem('clientes-rolagem') || '[0,0]');
+    }
+  } catch (e) {}
+  let espera;
+  [caixa, window].forEach(alvo => alvo.addEventListener('scroll', () => { clearTimeout(espera); espera = setTimeout(lembrar, 150); }));
+
   function aplicar() {
     const codigo = normalizar(fCodigo.value.trim());
     const nome = normalizar(fNome.value.trim());
@@ -158,6 +176,7 @@
       v ? url.searchParams.set(f.dataset.param, v) : url.searchParams.delete(f.dataset.param);
     }
     history.replaceState(null, '', url);
+    lembrar();
   }
 
   // Ordenação ao clicar nos títulos Código e Razão social (clicar de novo inverte).
@@ -198,6 +217,7 @@
     const url = new URL(location);
     ordem ? url.searchParams.set('ordem', ordem) : url.searchParams.delete('ordem');
     history.replaceState(null, '', url);
+    lembrar();
   }
 
   titulos.forEach(th => th.addEventListener('click', () => {
@@ -225,6 +245,7 @@
   if (comparadores[(params.get('ordem') || '').replace('-', '')]) ordem = params.get('ordem');
   ordenar();
   aplicar();
+  if (retomar) { caixa.scrollTop = retomar[0]; window.scrollTo(0, retomar[1]); lembrar(); }
 })();
 </script>
 {% endblock %}

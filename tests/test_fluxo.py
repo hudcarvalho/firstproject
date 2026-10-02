@@ -255,6 +255,12 @@ def test_sem_movimento(client, app):
         assert not c.sem_movimento and c.concluido_ate == date(2026, 7, 1)
 
 
+def test_botao_voltar_aos_clientes(client, app):
+    eid = _cadastrar(client, app)
+    for url in [f"/empresas/{eid}/contabil", f"/empresas/{eid}/editar", f"/distribuicao/empresas/{eid}"]:
+        assert "voltar-clientes" in client.get(url).get_data(as_text=True), url
+
+
 def test_lista_clientes_ordenavel_por_codigo_e_razao(client, app):
     _cadastrar(client, app)
     html = client.get("/empresas").get_data(as_text=True)
