@@ -1,5 +1,4 @@
 {% extends "base.html" %}
-{% from "_macros.html" import badge_ativo %}
 {% block title %}Clientes{% endblock %}
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-2">
@@ -10,6 +9,12 @@
   </div>
 </div>
 <div class="d-flex align-items-center gap-3 mb-2 small">
+  <label class="d-flex align-items-center gap-2 mb-0" for="f-situacao">Mostrar
+    <select class="form-select form-select-sm filtro w-auto" id="f-situacao" data-param="sit" data-campo="situacao">
+      <option value="">Ativas</option>
+      <option value="inativa">Inativas</option>
+      <option value="todas" {{ 'selected' if situacao_inicial == 'todas' }}>Todas</option>
+    </select></label>
   <span class="text-muted" id="busca-contador"></span>
   <a href="#" id="limpar-filtros" class="d-none">Limpar filtros</a>
 </div>
@@ -23,7 +28,8 @@
       <th style="width: 170px">Grupo econômico</th>
       <th style="width: 180px">Tributação</th>
       {% for m in modulos %}<th style="width: 160px">Resp. {{ m.nome }}</th>{% endfor %}
-      <th style="width: 120px">Situação</th><th style="width: 70px"></th>
+      {% for m in modulos %}<th style="width: 140px">{{ m.rotulo_controle }}</th>{% endfor %}
+      <th style="width: 70px"></th>
     </tr>
     <tr class="filtros" id="filtros">
       <th><input type="search" class="form-control form-control-sm filtro" id="f-codigo" data-param="cod" placeholder="Filtrar…" autocomplete="off"></th>
@@ -53,11 +59,12 @@
         {% for r in responsaveis[m.codigo] %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
       </select></th>
       {% endfor %}
-      <th><select class="form-select form-select-sm filtro" id="f-situacao" data-param="sit" data-campo="situacao">
-        <option value="">Ativas</option>
-        <option value="inativa">Inativas</option>
-        <option value="todas" {{ 'selected' if situacao_inicial == 'todas' }}>Todas</option>
+      {% for m in modulos %}
+      <th><select class="form-select form-select-sm filtro filtro-conc" id="f-conc-{{ m.codigo }}" data-param="conc_{{ m.codigo }}" data-campo="conc{{ m.codigo }}">
+        <option value="">Todas</option>
+        <option value="0">— em branco —</option>
       </select></th>
+      {% endfor %}
       <th></th>
     </tr>
   </thead>
@@ -65,20 +72,20 @@
   {% for e in empresas %}
     <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
         data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
-        {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" {% endfor %}>
+        {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
       <td>{% set total_dist = distribuido.get(e.id) %}<a class="icone-dist {{ 'ok' if total_dist else 'pendente' }}" href="{{ url_for('distribuicao.empresa', id=e.id) }}"
           title="{{ ('Distribuição de lucros ' ~ ano ~ ': R$ ' ~ (total_dist | valor)) if total_dist else ('Sem distribuição de lucros lançada em ' ~ ano) }} — abrir">$</a>
-        <a href="{{ url_for('main.empresa_detalhe', id=e.id) }}">{{ e.razao_social }}</a>{% if e.nome_fantasia %}<div class="small text-muted">{{ e.nome_fantasia }}</div>{% endif %}</td>
+        <a href="{{ url_for('main.empresa_detalhe', id=e.id) }}">{{ e.razao_social }}</a>{% if not e.ativo %} <span class="badge text-bg-secondary">Inativa</span>{% endif %}{% if e.nome_fantasia %}<div class="small text-muted">{{ e.nome_fantasia }}</div>{% endif %}</td>
       <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
       <td>{{ e.grupo.nome if e.grupo else '' }}</td>
       <td class="text-nowrap">{{ e.regime.nome }}</td>
       {% for m in modulos %}{% set c = e.controle(m) %}<td>{{ c.responsavel.nome if c and c.responsavel else '—' }}</td>{% endfor %}
-      <td>{{ badge_ativo(e.ativo) }}</td>
+      {% for m in modulos %}{% set c = e.controle(m) %}<td class="text-nowrap">{{ c.concluido_ate | competencia if c and c.concluido_ate else '' }}</td>{% endfor %}
       <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.empresa_editar', id=e.id) }}">Editar</a></td>
     </tr>
   {% endfor %}
-  <tr id="busca-vazio" class="d-none"><td colspan="{{ 7 + modulos|length }}" class="text-center text-muted py-4">
+  <tr id="busca-vazio" class="d-none"><td colspan="{{ 6 + 2 * modulos|length }}" class="text-center text-muted py-4">
     {% if empresas %}Nenhum cliente encontrado com esses filtros.{% else %}Nenhuma empresa cadastrada.{% endif %}</td></tr>
   </tbody>
 </table>
@@ -88,7 +95,17 @@
 {% block scripts %}
 <script>
 (function () {
-  const filtros = Array.from(document.querySelectorAll('#filtros .filtro'));
+  // "Escriturada até": lista no filtro as competências existentes, da mais recente à mais antiga
+  document.querySelectorAll('.filtro-conc').forEach(sel => {
+    const campo = sel.dataset.campo;
+    const valores = new Set(Array.from(document.querySelectorAll('tr.linha-cliente'), tr => tr.dataset[campo]));
+    valores.delete('0');
+    Array.from(valores).sort().reverse().forEach(v => {
+      const [ano, mes] = v.split('-');
+      sel.add(new Option(mes + '/' + ano, v));
+    });
+  });
+  const filtros = Array.from(document.querySelectorAll('.filtro'));
   const fCodigo = document.getElementById('f-codigo');
   const fNome = document.getElementById('f-nome');
   const fCnpj = document.getElementById('f-cnpj');
