@@ -225,6 +225,14 @@ def test_lista_clientes_tem_dados_para_filtros(client, app):
     assert '<option value="todas" selected>' in client.get("/empresas?inativas=1").get_data(as_text=True)
 
 
+def test_lista_clientes_mostra_escriturada_ate(client, app):
+    _cadastrar(client, app)  # escriturada até 06/2026
+    html = client.get("/empresas").get_data(as_text=True)
+    assert "Escriturada até" in html and "06/2026" in html
+    assert 'data-conccontabil="2026-06"' in html and 'id="f-conc-contabil"' in html
+    assert ">Situação<" not in html
+
+
 def test_lista_clientes_ordenavel_por_codigo_e_razao(client, app):
     _cadastrar(client, app)
     html = client.get("/empresas").get_data(as_text=True)
