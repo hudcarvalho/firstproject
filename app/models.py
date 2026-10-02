@@ -245,6 +245,7 @@ class EmpresaModulo(db.Model):
     modulo_id = db.Column(db.Integer, db.ForeignKey("modulo.id"), nullable=False)
     responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
     concluido_ate = db.Column(db.Date)  # competência (dia 1 do mês)
+    sem_movimento = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
 
     empresa = db.relationship("Empresa", back_populates="controles")
     modulo = db.relationship("Modulo")

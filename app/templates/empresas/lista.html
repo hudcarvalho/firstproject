@@ -63,6 +63,7 @@
       <th><select class="form-select form-select-sm filtro filtro-conc" id="f-conc-{{ m.codigo }}" data-param="conc_{{ m.codigo }}" data-campo="conc{{ m.codigo }}">
         <option value="">Todas</option>
         <option value="0">— em branco —</option>
+        <option value="sm">Sem movimento</option>
       </select></th>
       {% endfor %}
       <th></th>
@@ -72,7 +73,7 @@
   {% for e in empresas %}
     <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
         data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
-        {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" {% endfor %}>
+        {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" data-semmov{{ m.codigo }}="{{ 1 if c and c.sem_movimento else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
       <td>{% set total_dist = distribuido.get(e.id) %}<a class="icone-dist {{ 'ok' if total_dist else 'pendente' }}" href="{{ url_for('distribuicao.empresa', id=e.id) }}"
           title="{{ ('Distribuição de lucros ' ~ ano ~ ': R$ ' ~ (total_dist | valor)) if total_dist else ('Sem distribuição de lucros lançada em ' ~ ano) }} — abrir">$</a>
@@ -81,7 +82,7 @@
       <td>{{ e.grupo.nome if e.grupo else '' }}</td>
       <td class="text-nowrap">{{ e.regime.nome }}</td>
       {% for m in modulos %}{% set c = e.controle(m) %}<td>{{ c.responsavel.nome if c and c.responsavel else '—' }}</td>{% endfor %}
-      {% for m in modulos %}{% set c = e.controle(m) %}<td class="text-nowrap">{{ c.concluido_ate | competencia if c and c.concluido_ate else '' }}</td>{% endfor %}
+      {% for m in modulos %}{% set c = e.controle(m) %}<td class="text-nowrap">{{ c.concluido_ate | competencia if c and c.concluido_ate else '' }}{% if c and c.sem_movimento %} <span class="badge text-bg-secondary">Sem movimento</span>{% endif %}</td>{% endfor %}
       <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.empresa_editar', id=e.id) }}">Editar</a></td>
     </tr>
   {% endfor %}
@@ -134,6 +135,8 @@
         const v = s.value;
         if (s.dataset.campo === 'situacao') {
           ok = v === 'todas' || l.dados.situacao === (v || 'ativa');
+        } else if (v === 'sm') {  // "Escriturada até" → Sem movimento
+          ok = l.dados['semmov' + s.dataset.campo.slice(4)] === '1';
         } else if (v !== '') {
           ok = l.dados[s.dataset.campo] === v;
         }
