@@ -47,7 +47,7 @@ def test_paginas(client, app):
                 "/contabil/matriz", "/regimes", "/regimes/novo", "/responsaveis",
                 "/responsaveis/novo", "/modulos", "/modulos/1/editar"]:
         assert client.get(url).status_code == 200, url
-    assert client.get("/").headers["Location"].endswith("/contabil/")
+    assert client.get("/").headers["Location"].endswith("/empresas")
 
 
 def test_modulo_inativo_fica_oculto(client, app):

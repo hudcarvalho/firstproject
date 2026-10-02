@@ -21,7 +21,8 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
 
 ## Funcionalidades
 
-- **Painel (por módulo)**: lista das empresas ativas com tributação, responsável,
+- **Página inicial**: a lista de **Clientes** (também no menu e no nome "Controle de Rotina").
+- **Painel (por módulo)**, no menu do módulo (*Contábil → Painel*): lista das empresas ativas com tributação, responsável,
   "escriturada até" (com indicador de atraso) e quantidade de obrigações pendentes.
   Filtros por responsável (inclusive "sem responsável"), tributação e busca por nome/CNPJ.
 - **Clientes (empresas)**: cadastro com razão social, nome fantasia, CNPJ (validado),

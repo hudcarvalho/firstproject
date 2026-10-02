@@ -68,10 +68,8 @@ def _responsaveis_ativos():
 
 @bp.route("/")
 def inicio():
-    ativos = Modulo.ativos()
-    if not ativos:
-        return redirect(url_for("main.modulos_lista"))
-    return redirect(url_for("main.painel", modulo=ativos[0].codigo))
+    # A página inicial é a lista de clientes; o painel de cada módulo fica no menu do módulo.
+    return redirect(url_for("main.empresas_lista"))
 
 
 # ---------------------------------------------------------------- Painel (por módulo)
