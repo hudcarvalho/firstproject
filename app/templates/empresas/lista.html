@@ -18,7 +18,8 @@
 <table class="table table-hover table-sm align-middle mb-0">
   <thead>
     <tr class="titulos">
-      <th style="width: 90px">Código</th><th>Razão social</th><th style="width: 170px">CNPJ</th>
+      <th style="width: 90px" class="ordenavel" data-ordem="codigo" title="Clique para ordenar por código (menor/maior)">Código <span class="seta"></span></th>
+      <th class="ordenavel" data-ordem="nome" title="Clique para ordenar por razão social (A–Z / Z–A)">Razão social <span class="seta"></span></th><th style="width: 170px">CNPJ</th>
       <th style="width: 170px">Grupo econômico</th>
       <th style="width: 180px">Tributação</th>
       {% for m in modulos %}<th style="width: 160px">Resp. {{ m.nome }}</th>{% endfor %}
@@ -62,7 +63,7 @@
   </thead>
   <tbody>
   {% for e in empresas %}
-    <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-cnpj="{{ e.cnpj }}"
+    <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
         data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
@@ -139,6 +140,51 @@
     history.replaceState(null, '', url);
   }
 
+  // Ordenação ao clicar nos títulos Código e Razão social (clicar de novo inverte).
+  const corpo = vazio.parentNode;
+  const titulos = Array.from(document.querySelectorAll('th.ordenavel'));
+  const comparaTexto = new Intl.Collator('pt-BR', { sensitivity: 'base', numeric: true }).compare;
+  const comparadores = {
+    nome: (a, b) => comparaTexto(a.dados.razao, b.dados.razao),
+    codigo: (a, b) => {
+      const x = a.dados.codigo, y = b.dados.codigo;
+      if (!x || !y) return (x ? 0 : 1) - (y ? 0 : 1);  // sem código fica no fim
+      const nx = Number(x), ny = Number(y);
+      if (!isNaN(nx) && !isNaN(ny) && nx !== ny) return nx - ny;
+      return comparaTexto(x, y);
+    },
+  };
+  let ordem = '';  // "codigo", "-codigo", "nome" ou "-nome"; vazio = ordem original (razão social)
+
+  function ordenar() {
+    const campo = ordem.replace('-', '');
+    const lista = linhas.slice();
+    if (comparadores[campo]) {
+      const desc = ordem.startsWith('-');
+      lista.sort((a, b) => {
+        const r = comparadores[campo](a, b);
+        // no código, quem não tem código fica sempre no fim
+        if (campo === 'codigo' && (!a.dados.codigo || !b.dados.codigo)) return r;
+        return desc ? -r : r;
+      });
+    }
+    lista.forEach(l => corpo.insertBefore(l.tr, vazio));
+    titulos.forEach(th => {
+      const ativo = th.dataset.ordem === campo;
+      th.classList.toggle('ordem-ativa', ativo);
+      th.querySelector('.seta').textContent = ativo ? (ordem.startsWith('-') ? '▼' : '▲') : '⇅';
+      th.setAttribute('aria-sort', ativo ? (ordem.startsWith('-') ? 'descending' : 'ascending') : 'none');
+    });
+    const url = new URL(location);
+    ordem ? url.searchParams.set('ordem', ordem) : url.searchParams.delete('ordem');
+    history.replaceState(null, '', url);
+  }
+
+  titulos.forEach(th => th.addEventListener('click', () => {
+    ordem = ordem === th.dataset.ordem ? '-' + th.dataset.ordem : th.dataset.ordem;
+    ordenar();
+  }));
+
   filtros.forEach(f => {
     f.addEventListener(f.tagName === 'SELECT' ? 'change' : 'input', aplicar);
     if (f.tagName === 'INPUT') f.addEventListener('keydown', e => { if (e.key === 'Escape') { f.value = ''; aplicar(); } });
@@ -156,6 +202,8 @@
     if (v === null) continue;
     if (f.tagName === 'INPUT' || Array.from(f.options).some(o => o.value === v)) f.value = v;
   }
+  if (comparadores[(params.get('ordem') || '').replace('-', '')]) ordem = params.get('ordem');
+  ordenar();
   aplicar();
 })();
 </script>
