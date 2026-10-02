@@ -179,6 +179,7 @@ def _form_empresa(empresa):
         controle.responsavel_id = _int_or_none(f.get(f"responsavel_{m.codigo}"))
         bruto = f.get(f"concluido_{m.codigo}")
         controle.concluido_ate = parse_competencia(bruto)
+        controle.sem_movimento = f.get(f"sem_movimento_{m.codigo}") == "on"
         if bruto and controle.concluido_ate is None:
             erros.append(f"{m.nome}: competência inválida em “{m.rotulo_controle}”.")
     return erros
@@ -271,13 +272,20 @@ def empresa_observacoes(id, modulo):
 def empresa_controle(id, modulo):
     empresa = _get(Empresa, id)
     modulo = _modulo(modulo)
-    comp = parse_competencia(request.form.get("concluido_ate"))
-    if comp is None:
+    bruto = request.form.get("concluido_ate")
+    comp = parse_competencia(bruto)
+    sem_movimento = request.form.get("sem_movimento") == "on"
+    if comp is None and (bruto or not sem_movimento):
         flash("Competência inválida.", "danger")
     else:
-        empresa.controle(modulo, criar=True).concluido_ate = comp
+        controle = empresa.controle(modulo, criar=True)
+        if comp:
+            controle.concluido_ate = comp
+        controle.sem_movimento = sem_movimento
         db.session.commit()
-        flash(f"{modulo.rotulo_controle} {comp:%m/%Y}.", "success")
+        partes = [f"{modulo.rotulo_controle} {comp:%m/%Y}"] if comp else []
+        partes.append("sem movimento" if sem_movimento else "com movimento")
+        flash(", ".join(partes).capitalize() + ".", "success")
     return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
 
 

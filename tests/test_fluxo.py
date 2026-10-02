@@ -233,6 +233,28 @@ def test_lista_clientes_mostra_escriturada_ate(client, app):
     assert ">Situação<" not in html
 
 
+def test_sem_movimento(client, app):
+    eid = _cadastrar(client, app)
+    html = client.get("/empresas").get_data(as_text=True)
+    assert '<option value="sm">Sem movimento</option>' in html and 'data-semmovcontabil="0"' in html
+    # marcar sem informar competência mantém a data já gravada
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "", "sem_movimento": "on"})
+    with app.app_context():
+        c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
+        assert c.sem_movimento and c.concluido_ate == date(2026, 6, 1)
+    html = client.get("/empresas").get_data(as_text=True)
+    assert 'data-semmovcontabil="1"' in html
+    assert "Sem movimento</span>" in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    # sem competência e sem marcar: erro, nada muda
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": ""})
+    with app.app_context():
+        assert db.session.get(Empresa, eid).controle(_modulo("contabil")).sem_movimento
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "2026-07"})
+    with app.app_context():
+        c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
+        assert not c.sem_movimento and c.concluido_ate == date(2026, 7, 1)
+
+
 def test_lista_clientes_ordenavel_por_codigo_e_razao(client, app):
     _cadastrar(client, app)
     html = client.get("/empresas").get_data(as_text=True)
