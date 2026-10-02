@@ -1,5 +1,6 @@
 {# Cabeçalho da empresa com as abas: um por módulo ativo + Distribuição de Lucros.
    Espera: empresa e aba ("modulo:<codigo>" ou "distribuicao"). #}
+<a class="btn btn-sm btn-outline-secondary mb-2 voltar-clientes" href="{{ url_for('main.empresas_lista') }}">&larr; Voltar aos clientes</a>
 <div class="d-flex justify-content-between align-items-start mb-3">
   <div>
     <h1 class="h3 mb-1">{{ empresa.razao_social }} {% if not empresa.ativo %}<span class="badge text-bg-secondary align-middle">Inativa</span>{% endif %}</h1>

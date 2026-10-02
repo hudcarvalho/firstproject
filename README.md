@@ -32,7 +32,9 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   de Z a A). A coluna **Escriturada até** mostra o mês/ano informado em cada empresa (em branco
   se ainda não foi preenchido) e tem filtro por competência e por **Sem movimento** (marcação
   feita na tela da empresa, junto de "Escriturada até", ou em Editar cadastro); ativas/inativas são escolhidas em
-  **Mostrar**, acima da tabela.
+  **Mostrar**, acima da tabela. Nas telas da empresa (Contábil, Distribuição de Lucros, Editar
+  cadastro), o botão **← Voltar aos clientes** retorna à lista com os mesmos filtros, ordem e
+  posição da rolagem.
 - **Tela da empresa**: situação de cada obrigação (última competência cumprida,
   competência esperada, em dia/pendente), atualização rápida da escrituração,
   registro de cumprimento de obrigações, histórico e **observações** (particularidades da

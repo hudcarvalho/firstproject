@@ -68,6 +68,17 @@
   {% block content %}{% endblock %}
 </main>
 <script src="{{ estatico('vendor/bootstrap.bundle.min.js') }}"></script>
+<script>
+// Botões "Voltar aos clientes": voltam à lista com os mesmos filtros, ordem e posição.
+(function () {
+  let url = null;
+  try { url = sessionStorage.getItem('clientes-url'); } catch (e) {}
+  document.querySelectorAll('a.voltar-clientes').forEach(a => {
+    if (url) a.href = url;
+    a.addEventListener('click', () => { try { sessionStorage.setItem('clientes-voltar', '1'); } catch (e) {} });
+  });
+})();
+</script>
 {% block scripts %}{% endblock %}
 </body>
 </html>
