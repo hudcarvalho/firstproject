@@ -26,7 +26,9 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   Filtros por responsável (inclusive "sem responsável"), tributação e busca por nome/CNPJ.
 - **Clientes (empresas)**: cadastro com razão social, nome fantasia, CNPJ (validado),
   inscrições, contato, **grupo econômico**, **tributação**, observações e, para cada módulo ativo,
-  **responsável** e competência concluída.
+  **responsável** e competência concluída. Na lista, clicar no título **Código** ordena do
+  menor para o maior (de novo, do maior para o menor) e em **Razão social**, de A a Z (de novo,
+  de Z a A).
 - **Tela da empresa**: situação de cada obrigação (última competência cumprida,
   competência esperada, em dia/pendente), atualização rápida da escrituração,
   registro de cumprimento de obrigações, histórico e **observações** (particularidades da

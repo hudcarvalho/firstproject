@@ -225,6 +225,13 @@ def test_lista_clientes_tem_dados_para_filtros(client, app):
     assert '<option value="todas" selected>' in client.get("/empresas?inativas=1").get_data(as_text=True)
 
 
+def test_lista_clientes_ordenavel_por_codigo_e_razao(client, app):
+    _cadastrar(client, app)
+    html = client.get("/empresas").get_data(as_text=True)
+    assert 'data-ordem="codigo"' in html and 'data-ordem="nome"' in html
+    assert 'data-razao="ACME Ltda"' in html
+
+
 def test_arquivos_estaticos_com_versao(client):
     import re
     html = client.get("/empresas").get_data(as_text=True)
