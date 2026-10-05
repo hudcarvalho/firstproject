@@ -30,7 +30,8 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   **responsável** e competência concluída. Na lista, clicar no título **Código** ordena do
   menor para o maior (de novo, do maior para o menor) e em **Razão social**, de A a Z (de novo,
   de Z a A); em **Escriturada até**, da competência mais antiga para a mais recente (de novo, o
-  inverso), sempre com as em branco no fim. A coluna **Escriturada até** mostra o mês/ano informado em cada empresa (em branco
+  inverso), sempre com as sem data no fim (primeiro as "sem movimento", depois as em branco). O
+  filtro "— em branco —" traz só as sem data e com movimento. A coluna **Escriturada até** mostra o mês/ano informado em cada empresa (em branco
   se ainda não foi preenchido) e tem filtro por competência e por **Sem movimento** (marcação
   feita na tela da empresa, junto de "Escriturada até", ou em Editar cadastro); ativas/inativas são escolhidas em
   **Mostrar**, acima da tabela. Nas telas da empresa (Contábil, Distribuição de Lucros, Editar
