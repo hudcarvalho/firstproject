@@ -265,6 +265,7 @@ def test_lista_clientes_ordenavel_por_codigo_e_razao(client, app):
     _cadastrar(client, app)
     html = client.get("/empresas").get_data(as_text=True)
     assert 'data-ordem="codigo"' in html and 'data-ordem="nome"' in html
+    assert 'data-ordem="conccontabil"' in html
     assert 'data-razao="ACME Ltda"' in html
 
 

@@ -28,7 +28,7 @@
       <th style="width: 170px">Grupo econômico</th>
       <th style="width: 180px">Tributação</th>
       {% for m in modulos %}<th style="width: 160px">Resp. {{ m.nome }}</th>{% endfor %}
-      {% for m in modulos %}<th style="width: 140px">{{ m.rotulo_controle }}</th>{% endfor %}
+      {% for m in modulos %}<th style="width: 150px" class="ordenavel" data-ordem="conc{{ m.codigo }}" title="Clique para ordenar por competência (mais antiga/mais recente)">{{ m.rotulo_controle }} <span class="seta"></span></th>{% endfor %}
       <th style="width: 70px"></th>
     </tr>
     <tr class="filtros" id="filtros">
@@ -187,13 +187,21 @@
     nome: (a, b) => comparaTexto(a.dados.razao, b.dados.razao),
     codigo: (a, b) => {
       const x = a.dados.codigo, y = b.dados.codigo;
-      if (!x || !y) return (x ? 0 : 1) - (y ? 0 : 1);  // sem código fica no fim
       const nx = Number(x), ny = Number(y);
       if (!isNaN(nx) && !isNaN(ny) && nx !== ny) return nx - ny;
       return comparaTexto(x, y);
     },
   };
-  let ordem = '';  // "codigo", "-codigo", "nome" ou "-nome"; vazio = ordem original (razão social)
+  // quem não tem o valor (sem código, competência em branco) fica sempre no fim
+  const semValor = { codigo: l => !l.dados.codigo };
+  // "Escriturada até" de cada módulo: competência AAAA-MM; empate segue a razão social
+  titulos.filter(th => th.dataset.ordem.startsWith('conc')).forEach(th => {
+    const campo = th.dataset.ordem;
+    comparadores[campo] = (a, b) => (a.dados[campo] < b.dados[campo] ? -1 : a.dados[campo] > b.dados[campo] ? 1 : 0)
+      || comparaTexto(a.dados.razao, b.dados.razao);
+    semValor[campo] = l => l.dados[campo] === '0';
+  });
+  let ordem = '';  // campo da ordem ("codigo", "nome", "conccontabil"…), com "-" para decrescente; vazio = razão social
 
   function ordenar() {
     const campo = ordem.replace('-', '');
@@ -201,9 +209,11 @@
     if (comparadores[campo]) {
       const desc = ordem.startsWith('-');
       lista.sort((a, b) => {
+        const falta = semValor[campo];
+        if (falta && (falta(a) || falta(b))) {
+          return (falta(a) - falta(b)) || comparaTexto(a.dados.razao, b.dados.razao);
+        }
         const r = comparadores[campo](a, b);
-        // no código, quem não tem código fica sempre no fim
-        if (campo === 'codigo' && (!a.dados.codigo || !b.dados.codigo)) return r;
         return desc ? -r : r;
       });
     }
