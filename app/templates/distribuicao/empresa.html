@@ -61,6 +61,7 @@
       <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('distribuicao.empresa', id=empresa.id, ano=ano - 1) }}">‹ {{ ano - 1 }}</a>
       <span class="fw-semibold px-2">{{ ano }}</span>
       <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('distribuicao.empresa', id=empresa.id, ano=ano + 1) }}">{{ ano + 1 }} ›</a>
+      <a class="btn btn-sm btn-outline-success ms-2" href="{{ url_for('distribuicao.exportar', ano=ano, empresa=empresa.id) }}">Exportar Excel</a>
     </div>
   </div>
   {% if linhas %}

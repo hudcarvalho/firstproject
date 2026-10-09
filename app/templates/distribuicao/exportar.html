@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}Exportar distribuição de lucros{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Exportar distribuição de lucros</h1>
+<form method="get" class="card card-body" style="max-width: 760px" id="form-exportar">
+  {% if empresa %}<input type="hidden" name="empresa" value="{{ empresa.id }}">
+  <div class="mb-3">Cliente: <strong>{{ empresa.razao_social }}</strong>
+    <a class="small ms-2" href="{{ url_for('distribuicao.exportar', ano=ano, de=mes_de, ate=mes_ate) }}">exportar todos os clientes</a></div>
+  {% endif %}
+  <div class="row g-3 align-items-end">
+    <div class="col-sm-3">
+      <label class="form-label" for="ano">Ano</label>
+      <select class="form-select" name="ano" id="ano">
+        {% for a in anos %}<option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label" for="de">De</label>
+      <select class="form-select" name="de" id="de">
+        {% for m in meses %}<option value="{{ loop.index }}" {{ 'selected' if loop.index == mes_de }}>{{ m }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-3">
+      <label class="form-label" for="ate">Até</label>
+      <select class="form-select" name="ate" id="ate">
+        {% for m in meses %}<option value="{{ loop.index }}" {{ 'selected' if loop.index == mes_ate }}>{{ m }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-sm-3"><button class="btn btn-outline-secondary w-100">Atualizar</button></div>
+  </div>
+  <hr>
+  <p class="mb-3">
+    {% if quantidade %}
+      <strong>{{ quantidade }}</strong> lançamento{{ 's' if quantidade != 1 }} de
+      <strong>{{ clientes }}</strong> cliente{{ 's' if clientes != 1 }}, total de <strong>R$ {{ total | valor }}</strong>.
+    {% else %}
+      Nenhuma distribuição lançada nesse período.
+    {% endif %}
+  </p>
+  <div>
+    <button class="btn btn-success" name="baixar" value="1" {{ 'disabled' if not quantidade }}>Baixar planilha Excel</button>
+  </div>
+  <div class="form-text mt-2">Uma linha por sócio e mês, com as colunas CODIGO, RAZÃO SOCIAL, CNPJ, Nome do sócio,
+    Sócio CPF/CNPJ, Distribuição e REF. (mês/ano).</div>
+</form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ao trocar o período, atualiza o resumo
+document.querySelectorAll('#form-exportar select').forEach(s => s.addEventListener('change', () => s.form.submit()));
+</script>
+{% endblock %}

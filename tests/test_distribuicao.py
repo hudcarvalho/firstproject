@@ -180,3 +180,40 @@ def test_icone_distribuicao_na_lista_de_clientes(client, app, empresas):
     # dados para o filtro "Com lançamento / Sem lançamento"
     assert 'id="f-dist"' in html
     assert html.count('data-dist="1"') == 1 and html.count('data-dist="0"') == 1
+
+
+def test_exportar_excel(client, app, empresas):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    a, b = empresas
+    client.post(f"/distribuicao/{a}/socios", data={"nome": "Ana Souza", "documento": CPF1})
+    client.post(f"/distribuicao/{b}/socios", data={"nome": "Holding X", "documento": CNPJ_SOCIO})
+    with app.app_context():
+        ana = Socio.query.filter_by(nome="Ana Souza").one().id
+        holding = Socio.query.filter_by(nome="Holding X").one().id
+    client.post(f"/distribuicao/{a}?ano=2026", data={f"v-{ana}-1": "1.000,00", f"v-{ana}-3": "250,50"})
+    client.post(f"/distribuicao/{b}?ano=2026", data={f"v-{holding}-2": "2.000"})
+
+    assert "Exportar distribuição de lucros" in client.get("/empresas").get_data(as_text=True)
+    tela = client.get("/distribuicao/exportar?ano=2026").get_data(as_text=True)
+    assert "<strong>3</strong> lançamentos" in tela and "3.250,50" in tela
+
+    r = client.get("/distribuicao/exportar?ano=2026&baixar=1")
+    assert r.status_code == 200 and "distribuicao_lucros_2026.xlsx" in r.headers["Content-Disposition"]
+    ws = load_workbook(BytesIO(r.data)).active
+    linhas = list(ws.iter_rows(values_only=True))
+    assert linhas[0] == ("CODIGO", "RAZÃO SOCIAL", "CNPJ", "Nome do sócio", "Sócio CPF/CNPJ",
+                         "Distribuição", "REF.")
+    assert linhas[1] == (29, "CHAVEIRO ITALIA LTDA", "11.222.333/0001-81", "Ana Souza", CPF1, 1000, "01/2026")
+    assert linhas[2][5] == 250.5 and linhas[2][6] == "03/2026"
+    assert linhas[3] == (30, "CHAVEIRO ROMA LTDA", "45.997.418/0001-53", "Holding X", CNPJ_SOCIO, 2000, "02/2026")
+
+    # período e cliente
+    r = client.get(f"/distribuicao/exportar?ano=2026&de=2&ate=3&empresa={a}&baixar=1")
+    linhas = list(load_workbook(BytesIO(r.data)).active.iter_rows(values_only=True))
+    assert [l[6] for l in linhas[1:]] == ["03/2026"]
+    # sem lançamentos: volta à tela com aviso
+    r = client.get("/distribuicao/exportar?ano=2025&baixar=1", follow_redirects=True)
+    assert "Nenhuma distribuição lançada" in r.get_data(as_text=True)
