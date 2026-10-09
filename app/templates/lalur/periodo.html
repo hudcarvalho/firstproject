@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block title %}LALUR {{ rotulo }} {{ ano }} · {{ empresa.nome_exibicao }}{% endblock %}
+{% block content %}
+{% with aba = 'lalur' %}{% include "empresas/_cabecalho.html" %}{% endwith %}
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h2 class="h5 mb-0">LALUR · {{ rotulo }} de {{ ano }}</h2>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano) }}">← Resumo de {{ ano }}</a>
+</div>
+
+<div class="row g-4">
+<div class="col-lg-7">
+  <form method="post" class="card mb-4"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <div class="card-header"><strong>Dados da apuração</strong></div>
+    <div class="card-body">
+      <div class="row g-3">
+        <div class="col-sm-6"><label class="form-label">Lucro líquido antes do IRPJ e da CSLL</label>
+          <input class="form-control text-end valor" name="lucro_antes" value="{{ apuracao.lucro_antes | valor if apuracao and apuracao.lucro_antes is not none else '' }}" placeholder="0,00 (prejuízo: -0,00)" inputmode="decimal" autofocus>
+          <div class="form-text">Resultado contábil do período (DRE). Prejuízo com sinal de menos.</div></div>
+        <div class="col-sm-3"><label class="form-label">Alíquota CSLL (%)</label>
+          <input class="form-control text-end" name="aliquota_csll" value="{{ apuracao.aliquota_csll | valor if apuracao else '9,00' }}" inputmode="decimal"></div>
+        <div class="col-sm-3 d-flex align-items-end"><div class="form-check mb-2">
+          <input class="form-check-input" type="checkbox" name="compensar" id="compensar" {{ 'checked' if not apuracao or apuracao.compensar }}>
+          <label class="form-check-label" for="compensar">Compensar prejuízos (até 30%)</label></div></div>
+        <div class="col-sm-6"><label class="form-label">IRPJ a deduzir (retido/antecipado)</label>
+          <input class="form-control text-end valor" name="irpj_deduzir" value="{{ apuracao.irpj_deduzir | valor if apuracao else '' }}" placeholder="0,00" inputmode="decimal"></div>
+        <div class="col-sm-6"><label class="form-label">CSLL a deduzir (retida/antecipada)</label>
+          <input class="form-control text-end valor" name="csll_deduzir" value="{{ apuracao.csll_deduzir | valor if apuracao else '' }}" placeholder="0,00" inputmode="decimal"></div>
+        <div class="col-12"><label class="form-label">Observação</label>
+          <textarea class="form-control" name="observacao" rows="2">{{ apuracao.observacao or '' if apuracao }}</textarea></div>
+      </div>
+    </div>
+    <div class="card-footer d-flex justify-content-between">
+      <button class="btn btn-primary">Salvar e calcular</button>
+    </div>
+  </form>
+
+  <div class="card mb-4" id="lancamentos">
+    <div class="card-header"><strong>Adições e exclusões</strong></div>
+    {% set itens = apuracao.lancamentos if apuracao else [] %}
+    {% if itens %}
+    <div class="table-responsive">
+    <table class="table table-sm align-middle mb-0">
+      <thead class="table-light"><tr><th>Tipo</th><th>Descrição</th><th>Tributo</th><th class="text-end">Valor (R$)</th><th></th></tr></thead>
+      <tbody>
+      {% for l in itens %}
+        <tr><td><span class="badge {{ 'text-bg-danger' if l.tipo == 'adicao' else 'text-bg-success' }}">{{ tipos[l.tipo] }}</span></td>
+          <td>{{ l.descricao }}</td><td class="small">{{ tributos[l.tributo] }}</td>
+          <td class="text-end text-nowrap">{{ l.valor | valor }}</td>
+          <td class="text-end"><form method="post" action="{{ url_for('lalur.lancamento_remover', lid=l.id) }}" onsubmit="return confirm('Remover este lançamento?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <button class="btn btn-sm btn-link text-danger p-0">remover</button></form></td></tr>
+      {% endfor %}
+      </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="card-body text-muted small">Nenhuma adição ou exclusão lançada.</div>
+    {% endif %}
+    <form method="post" action="{{ url_for('lalur.lancamento_novo', id=empresa.id, ano=ano, periodo=periodo) }}" class="row g-2 p-3 border-top bg-light mx-0"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="col-sm-3"><select class="form-select form-select-sm" name="tipo" id="tipo-lancamento">
+        {% for k, t in tipos.items() %}<option value="{{ k }}">{{ t }}</option>{% endfor %}</select></div>
+      <div class="col-sm-4"><input class="form-control form-control-sm" name="descricao" list="sugestoes-adicao" id="descricao-lancamento" placeholder="Descrição" required maxlength="200"></div>
+      <div class="col-sm-2"><select class="form-select form-select-sm" name="tributo">
+        {% for k, t in tributos.items() %}<option value="{{ k }}">{{ t }}</option>{% endfor %}</select></div>
+      <div class="col-sm-2"><input class="form-control form-control-sm text-end valor" name="valor" placeholder="0,00" required inputmode="decimal"></div>
+      <div class="col-sm-1"><button class="btn btn-sm btn-primary w-100">+</button></div>
+    </form>
+    <datalist id="sugestoes-adicao">{% for s in sugestoes_adicao %}<option value="{{ s }}">{% endfor %}</datalist>
+    <datalist id="sugestoes-exclusao">{% for s in sugestoes_exclusao %}<option value="{{ s }}">{% endfor %}</datalist>
+  </div>
+
+  {% if apuracao %}
+  <form method="post" action="{{ url_for('lalur.excluir', id=empresa.id, ano=ano, periodo=periodo) }}" onsubmit="return confirm('Excluir toda a apuração deste período, com as adições e exclusões?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+    <button class="btn btn-sm btn-outline-danger">Excluir apuração do período</button>
+  </form>
+  {% endif %}
+</div>
+
+<div class="col-lg-5">
+  <div class="card position-sticky" style="top: 1rem">
+    <div class="card-header"><strong>Demonstrativo</strong></div>
+    {% if d %}
+    <table class="table table-sm mb-0 tabela-lalur">
+      <tbody>
+        <tr><td>Lucro antes do IRPJ/CSLL</td><td class="text-end">{{ d.apuracao.lucro_antes | valor }}</td></tr>
+        <tr class="table-light"><th colspan="2" class="small text-uppercase text-muted">IRPJ</th></tr>
+        <tr><td>(+) Adições</td><td class="text-end">{{ d.irpj.adicoes | valor }}</td></tr>
+        <tr><td>(−) Exclusões</td><td class="text-end">{{ d.irpj.exclusoes | valor }}</td></tr>
+        <tr class="fw-semibold"><td>= Lucro ajustado</td><td class="text-end">{{ d.irpj.ajustado | valor }}</td></tr>
+        <tr><td>(−) Compensação de prejuízo <span class="small text-muted">(saldo {{ d.irpj.saldo_anterior | valor }})</span></td><td class="text-end">{{ d.irpj.compensacao | valor }}</td></tr>
+        <tr class="fw-semibold"><td>= Lucro real</td><td class="text-end">{{ d.irpj.base | valor }}</td></tr>
+        <tr><td>IRPJ 15%</td><td class="text-end">{{ d.irpj_normal | valor }}</td></tr>
+        <tr><td>Adicional 10%</td><td class="text-end">{{ d.irpj_adicional | valor }}</td></tr>
+        <tr><td>(−) Deduções</td><td class="text-end">{{ d.apuracao.irpj_deduzir | valor }}</td></tr>
+        <tr class="fw-bold"><td>IRPJ a pagar</td><td class="text-end">{{ d.irpj_a_pagar | valor }}</td></tr>
+        <tr class="table-light"><th colspan="2" class="small text-uppercase text-muted">CSLL ({{ d.apuracao.aliquota_csll | valor }}%)</th></tr>
+        <tr><td>(+) Adições</td><td class="text-end">{{ d.csll.adicoes | valor }}</td></tr>
+        <tr><td>(−) Exclusões</td><td class="text-end">{{ d.csll.exclusoes | valor }}</td></tr>
+        <tr class="fw-semibold"><td>= Base ajustada</td><td class="text-end">{{ d.csll.ajustado | valor }}</td></tr>
+        <tr><td>(−) Compensação de base negativa <span class="small text-muted">(saldo {{ d.csll.saldo_anterior | valor }})</span></td><td class="text-end">{{ d.csll.compensacao | valor }}</td></tr>
+        <tr class="fw-semibold"><td>= Base de cálculo</td><td class="text-end">{{ d.csll.base | valor }}</td></tr>
+        <tr><td>CSLL devida</td><td class="text-end">{{ d.csll_devida | valor }}</td></tr>
+        <tr><td>(−) Deduções</td><td class="text-end">{{ d.apuracao.csll_deduzir | valor }}</td></tr>
+        <tr class="fw-bold"><td>CSLL a pagar</td><td class="text-end">{{ d.csll_a_pagar | valor }}</td></tr>
+        <tr class="table-light"><th colspan="2" class="small text-uppercase text-muted">Parte B — saldos ao final</th></tr>
+        <tr><td>Prejuízo fiscal a compensar{% if d.irpj.gerado %} <span class="small text-danger">(+{{ d.irpj.gerado | valor }} no período)</span>{% endif %}</td><td class="text-end">{{ d.irpj.saldo_final | valor }}</td></tr>
+        <tr><td>Base negativa a compensar{% if d.csll.gerado %} <span class="small text-danger">(+{{ d.csll.gerado | valor }} no período)</span>{% endif %}</td><td class="text-end">{{ d.csll.saldo_final | valor }}</td></tr>
+      </tbody>
+    </table>
+    {% else %}
+    <div class="card-body text-muted">Informe o lucro líquido antes do IRPJ e da CSLL e clique em
+      <strong>Salvar e calcular</strong> para ver o demonstrativo.</div>
+    {% endif %}
+  </div>
+</div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// sugestões de descrição conforme o tipo (adição/exclusão)
+(function () {
+  const tipo = document.getElementById('tipo-lancamento'), desc = document.getElementById('descricao-lancamento');
+  const trocar = () => desc.setAttribute('list', tipo.value === 'adicao' ? 'sugestoes-adicao' : 'sugestoes-exclusao');
+  tipo.addEventListener('change', trocar); trocar();
+})();
+</script>
+{% endblock %}

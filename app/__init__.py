@@ -90,6 +90,9 @@ def create_app(config=None):
     from .distribuicao import bp as bp_distribuicao
     app.register_blueprint(bp_distribuicao)
 
+    from .lalur import bp as bp_lalur
+    app.register_blueprint(bp_lalur)
+
     from .cli import registrar_comandos
     registrar_comandos(app)
 

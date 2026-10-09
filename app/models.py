@@ -192,6 +192,11 @@ class Empresa(db.Model):
     def nome_exibicao(self):
         return self.nome_fantasia or self.razao_social
 
+    @property
+    def lucro_real(self):
+        """Tributada pelo Lucro Real (inclui variações como "Lucro Real Trimestral")."""
+        return bool(self.regime and self.regime.nome.casefold().startswith("lucro real"))
+
     def controle(self, modulo, criar=False):
         """Registro de responsável/andamento da empresa no módulo."""
         for c in self.controles:
@@ -338,6 +343,58 @@ class DistribuicaoLucro(db.Model):
     socio = db.relationship("Socio", back_populates="distribuicoes")
 
     __table_args__ = (db.UniqueConstraint("socio_id", "ano", "mes"),)
+
+
+class LalurSaldoInicial(db.Model):
+    """Parte B do LALUR: saldos de abertura a compensar (antes da 1ª apuração no sistema)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False, unique=True)
+    prejuizo_fiscal = db.Column(db.Numeric(14, 2), nullable=False, default=0)  # IRPJ
+    base_negativa = db.Column(db.Numeric(14, 2), nullable=False, default=0)  # CSLL
+
+
+class LalurApuracao(db.Model):
+    """Parte A do LALUR: apuração do lucro real de um período (trimestre 1-4 ou anual = 0)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False, index=True)
+    ano = db.Column(db.Integer, nullable=False)
+    periodo = db.Column(db.Integer, nullable=False)  # 1 a 4 = trimestre; 0 = anual
+    lucro_antes = db.Column(db.Numeric(14, 2))  # lucro líquido antes do IRPJ e da CSLL
+    compensar = db.Column(db.Boolean, nullable=False, default=True)  # compensa prejuízos (30%)
+    aliquota_csll = db.Column(db.Numeric(5, 2), nullable=False, default=9)
+    irpj_deduzir = db.Column(db.Numeric(14, 2), nullable=False, default=0)  # retenções, antecipações
+    csll_deduzir = db.Column(db.Numeric(14, 2), nullable=False, default=0)
+    observacao = db.Column(db.Text)
+
+    empresa = db.relationship("Empresa")
+    lancamentos = db.relationship(
+        "LalurLancamento", back_populates="apuracao", cascade="all, delete-orphan",
+        order_by="(LalurLancamento.tipo, LalurLancamento.id)",
+    )
+
+    __table_args__ = (db.UniqueConstraint("empresa_id", "ano", "periodo"),)
+
+    @property
+    def periodo_label(self):
+        return "Anual" if self.periodo == 0 else f"{self.periodo}º trimestre"
+
+
+class LalurLancamento(db.Model):
+    """Adição ou exclusão do lucro líquido, para IRPJ, CSLL ou ambos."""
+
+    TIPOS = {"adicao": "Adição", "exclusao": "Exclusão"}
+    TRIBUTOS = {"ambos": "IRPJ e CSLL", "irpj": "Só IRPJ", "csll": "Só CSLL"}
+
+    id = db.Column(db.Integer, primary_key=True)
+    apuracao_id = db.Column(db.Integer, db.ForeignKey("lalur_apuracao.id"), nullable=False, index=True)
+    tipo = db.Column(db.String(10), nullable=False)
+    tributo = db.Column(db.String(5), nullable=False, default="ambos")
+    descricao = db.Column(db.String(200), nullable=False)
+    valor = db.Column(db.Numeric(14, 2), nullable=False)
+
+    apuracao = db.relationship("LalurApuracao", back_populates="lancamentos")
 
 
 class Usuario(UserMixin, db.Model):

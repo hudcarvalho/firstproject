@@ -56,6 +56,13 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   botão "Exportar Excel" na aba do cliente): escolhe ano e meses e baixa uma planilha .xlsx com
   uma linha por sócio e mês: CODIGO, RAZÃO SOCIAL, CNPJ, Nome do sócio, Sócio CPF/CNPJ,
   Distribuição e REF. (mês/ano).
+- **LALUR** (aba na tela da empresa, só para o **Lucro Real**): apuração trimestral (ou anual)
+  com lucro líquido antes do IRPJ/CSLL, adições e exclusões (para IRPJ, CSLL ou ambos, com
+  sugestões de descrição), compensação de prejuízo fiscal / base negativa limitada a 30% do lucro
+  ajustado, IRPJ 15% + adicional de 10% sobre o que passar de R$ 20.000,00/mês, CSLL (alíquota
+  editável, padrão 9%) e deduções de retenções/antecipações. Parte B com saldos de abertura e
+  saldos de prejuízo fiscal e base negativa encadeados automaticamente período a período; resumo
+  do ano com todos os trimestres lado a lado.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o
