@@ -1,0 +1,102 @@
+{% extends "base.html" %}
+{% block title %}LALUR · {{ empresa.nome_exibicao }}{% endblock %}
+{% block content %}
+{% with aba = 'lalur' %}{% include "empresas/_cabecalho.html" %}{% endwith %}
+
+{% macro v(x) %}{{ x | valor if x is not none else '' }}{% endmacro %}
+
+<div class="card mb-4">
+  <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <strong>LALUR · Parte A — apuração {{ 'anual' if modo == 'anual' else 'trimestral' }} {{ ano }}</strong>
+    <div class="d-flex align-items-center gap-2">
+      {% if not modo_fixo %}
+        {% if modo == 'anual' %}<a class="small me-2" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano) }}">mudar para trimestral</a>
+        {% else %}<a class="small me-2" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano, modo='anual') }}">mudar para anual</a>{% endif %}
+      {% endif %}
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano - 1) }}">‹ {{ ano - 1 }}</a>
+      <span class="fw-semibold px-2">{{ ano }}</span>
+      <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano + 1) }}">{{ ano + 1 }} ›</a>
+    </div>
+  </div>
+  <div class="table-responsive">
+  <table class="table table-sm align-middle mb-0 tabela-lalur">
+    <thead class="table-light">
+      <tr><th>R$</th>
+        {% for c in colunas %}
+        <th class="text-end" style="width: 15%">
+          <a href="{{ url_for('lalur.periodo', id=empresa.id, ano=ano, periodo=c.periodo) }}">{{ c.rotulo }}</a>
+          <div class="small fw-normal">
+            {% if c.d %}<span class="badge text-bg-success">apurado</span>
+            {% elif c.apuracao %}<span class="badge text-bg-warning">sem lucro informado</span>
+            {% else %}<span class="text-muted">não iniciado</span>{% endif %}
+          </div>
+        </th>
+        {% endfor %}
+      </tr>
+    </thead>
+    <tbody>
+      {% set linhas = [
+        ('Lucro líquido antes do IRPJ/CSLL', 'lucro', ''),
+        ('IRPJ', None, 'secao'),
+        ('(+) Adições', 'irpj.adicoes', ''),
+        ('(−) Exclusões', 'irpj.exclusoes', ''),
+        ('= Lucro ajustado', 'irpj.ajustado', 'fw-semibold'),
+        ('(−) Compensação de prejuízo fiscal', 'irpj.compensacao', ''),
+        ('= Lucro real', 'irpj.base', 'fw-semibold'),
+        ('IRPJ 15%', 'irpj_normal', ''),
+        ('Adicional 10%', 'irpj_adicional', ''),
+        ('(−) Deduções (retenções/antecipações)', 'irpj_deduzir', ''),
+        ('IRPJ a pagar', 'irpj_a_pagar', 'fw-bold'),
+        ('CSLL', None, 'secao'),
+        ('(+) Adições', 'csll.adicoes', ''),
+        ('(−) Exclusões', 'csll.exclusoes', ''),
+        ('= Base ajustada', 'csll.ajustado', 'fw-semibold'),
+        ('(−) Compensação de base negativa', 'csll.compensacao', ''),
+        ('= Base de cálculo', 'csll.base', 'fw-semibold'),
+        ('CSLL devida', 'csll_devida', ''),
+        ('(−) Deduções (retenções/antecipações)', 'csll_deduzir', ''),
+        ('CSLL a pagar', 'csll_a_pagar', 'fw-bold'),
+        ('Parte B — saldos ao final do período', None, 'secao'),
+        ('Prejuízo fiscal a compensar (IRPJ)', 'irpj.saldo_final', ''),
+        ('Base negativa a compensar (CSLL)', 'csll.saldo_final', ''),
+      ] %}
+      {% for rotulo, campo, classe in linhas %}
+        {% if classe == 'secao' %}
+        <tr class="table-light"><th colspan="{{ 1 + colunas|length }}" class="small text-uppercase text-muted">{{ rotulo }}</th></tr>
+        {% else %}
+        <tr class="{{ classe }}"><td>{{ rotulo }}</td>
+          {% for c in colunas %}{% set d = c.d %}
+          <td class="text-end text-nowrap">{% if d %}{{ v(
+            d.apuracao.lucro_antes if campo == 'lucro' else
+            d.irpj[campo[5:]] if campo.startswith('irpj.') else
+            d.csll[campo[5:]] if campo.startswith('csll.') else
+            d.apuracao.irpj_deduzir if campo == 'irpj_deduzir' else
+            d.apuracao.csll_deduzir if campo == 'csll_deduzir' else
+            d[campo]) }}{% endif %}</td>
+          {% endfor %}
+        </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  </div>
+  <div class="card-footer small text-muted">Clique no período para lançar o lucro, as adições e as exclusões.
+    A compensação respeita o limite de 30% do lucro ajustado; o adicional de 10% incide sobre o que passar de
+    R$ 20.000,00 por mês do período.</div>
+</div>
+
+<form method="post" action="{{ url_for('lalur.saldo_inicial', id=empresa.id, ano=ano) }}" class="card" style="max-width: 760px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-header"><strong>Parte B — saldos de abertura</strong></div>
+  <div class="card-body">
+    <p class="small text-muted">Saldos a compensar existentes antes da primeira apuração lançada no sistema
+      (de anos anteriores). A partir deles, os saldos de cada período são calculados automaticamente.</p>
+    <div class="row g-3 align-items-end">
+      <div class="col-sm-5"><label class="form-label">Prejuízo fiscal (IRPJ)</label>
+        <input class="form-control text-end valor" name="prejuizo_fiscal" value="{{ abertura.prejuizo_fiscal | valor if abertura else '' }}" placeholder="0,00" inputmode="decimal"></div>
+      <div class="col-sm-5"><label class="form-label">Base negativa (CSLL)</label>
+        <input class="form-control text-end valor" name="base_negativa" value="{{ abertura.base_negativa | valor if abertura else '' }}" placeholder="0,00" inputmode="decimal"></div>
+      <div class="col-sm-2"><button class="btn btn-primary w-100">Salvar</button></div>
+    </div>
+  </div>
+</form>
+{% endblock %}

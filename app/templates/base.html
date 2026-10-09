@@ -35,7 +35,7 @@
           </ul>
         </li>
         {% endfor %}
-        <li class="nav-item"><a class="nav-link {{ 'active' if (ep.startswith('main.empresa') and not mod_atual) or (ep.startswith('distribuicao.') and ep != 'distribuicao.exportar') }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if (ep.startswith('main.empresa') and not mod_atual) or ep.startswith('lalur.') or (ep.startswith('distribuicao.') and ep != 'distribuicao.exportar') }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
         {% if current_user.admin %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep or 'importar' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>

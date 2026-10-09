@@ -120,7 +120,7 @@ def parse_valor(texto):
         return None
     if "," in t:
         t = t.replace(".", "").replace(",", ".")
-    elif re.fullmatch(r"\d{1,3}(\.\d{3})+", t):
+    elif re.fullmatch(r"-?\d{1,3}(\.\d{3})+", t):
         t = t.replace(".", "")  # "2.000" e "1.500.000": ponto como separador de milhar
     try:
         valor = Decimal(t).quantize(Decimal("0.01"))
