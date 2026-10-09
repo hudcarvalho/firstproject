@@ -19,7 +19,7 @@
       <ul class="navbar-nav">
         {% for m in modulos_ativos %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {{ 'active' if mod_atual == m.codigo }}" href="#" data-bs-toggle="dropdown">{{ m.nome }}</a>
+          <a class="nav-link dropdown-toggle {{ 'active' if mod_atual == m.codigo or (m.codigo == 'contabil' and ep == 'distribuicao.exportar') }}" href="#" data-bs-toggle="dropdown">{{ m.nome }}</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo) }}">Painel</a></li>
             {% if current_user.responsavel_id %}<li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo, responsavel=current_user.responsavel_id) }}">Minhas empresas</a></li>{% endif %}
@@ -27,10 +27,15 @@
             <li><h6 class="dropdown-header">Parametrização</h6></li>
             <li><a class="dropdown-item" href="{{ url_for('main.obrigacoes_lista', modulo=m.codigo) }}">Obrigações</a></li>
             <li><a class="dropdown-item" href="{{ url_for('main.matriz', modulo=m.codigo) }}">Obrigações × Tributação</a></li>
+            {% if m.codigo == 'contabil' %}
+            <li><hr class="dropdown-divider"></li>
+            <li><h6 class="dropdown-header">Relatórios</h6></li>
+            <li><a class="dropdown-item" href="{{ url_for('distribuicao.exportar') }}">Exportar distribuição de lucros (Excel)</a></li>
+            {% endif %}
           </ul>
         </li>
         {% endfor %}
-        <li class="nav-item"><a class="nav-link {{ 'active' if (ep.startswith('main.empresa') and not mod_atual) or ep.startswith('distribuicao.') }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
+        <li class="nav-item"><a class="nav-link {{ 'active' if (ep.startswith('main.empresa') and not mod_atual) or (ep.startswith('distribuicao.') and ep != 'distribuicao.exportar') }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
         {% if current_user.admin %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep or 'importar' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>

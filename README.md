@@ -52,6 +52,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
 - **Distribuição de Lucros** (aba na tela da empresa, ao lado de Contábil): sócios
   (nome, CPF/CNPJ validados e % de quotas, com soma dos ativos) com cadastro, inativação e reativação; grade com os 12 meses por
   sócio, total anual por sócio, total por mês e total geral, com seleção do ano.
+- **Exportar distribuição de lucros (Excel)** (*Contábil → Exportar distribuição de lucros*, ou
+  botão "Exportar Excel" na aba do cliente): escolhe ano e meses e baixa uma planilha .xlsx com
+  uma linha por sócio e mês: CODIGO, RAZÃO SOCIAL, CNPJ, Nome do sócio, Sócio CPF/CNPJ,
+  Distribuição e REF. (mês/ano).
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

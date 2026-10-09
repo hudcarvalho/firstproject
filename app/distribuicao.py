@@ -6,7 +6,7 @@ from decimal import Decimal
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import or_
 
-from .competencia import cnpj_valido, cpf_valido, fmt_valor, parse_valor, so_digitos
+from .competencia import cnpj_valido, cpf_valido, fmt_documento, fmt_valor, parse_valor, so_digitos
 from .models import DistribuicaoLucro, Empresa, Socio, db
 
 bp = Blueprint("distribuicao", __name__, url_prefix="/distribuicao")
@@ -227,3 +227,103 @@ def socio_situacao(socio_id):
     db.session.commit()
     flash(f"Sócio {socio.nome} {'reativado' if socio.ativo else 'inativado'}.", "success")
     return redirect(url_for("distribuicao.empresa", id=socio.empresa_id, ano=_ano()))
+
+
+# ---------------------------------------------------------------- Exportação para Excel
+
+COLUNAS_EXPORTACAO = ["CODIGO", "RAZÃO SOCIAL", "CNPJ", "Nome do sócio", "Sócio CPF/CNPJ",
+                      "Distribuição", "REF."]
+
+
+def _mes(nome, padrao):
+    try:
+        mes = int(request.args.get(nome, ""))
+    except ValueError:
+        return padrao
+    return mes if 1 <= mes <= 12 else padrao
+
+
+def _lancamentos(ano, mes_de, mes_ate, empresa_id=None):
+    """Distribuições do período (valores diferentes de zero), por cliente, sócio e mês."""
+    consulta = (
+        db.session.query(DistribuicaoLucro, Socio, Empresa)
+        .join(Socio, DistribuicaoLucro.socio_id == Socio.id)
+        .join(Empresa, Socio.empresa_id == Empresa.id)
+        .filter(DistribuicaoLucro.ano == ano, DistribuicaoLucro.mes.between(mes_de, mes_ate),
+                DistribuicaoLucro.valor != 0)
+    )
+    if empresa_id:
+        consulta = consulta.filter(Empresa.id == empresa_id)
+    return consulta.order_by(Empresa.razao_social, Empresa.id, Socio.nome, Socio.id,
+                             DistribuicaoLucro.mes).all()
+
+
+def _planilha(lancamentos):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Distribuição de lucros"
+    ws.append(COLUNAS_EXPORTACAO)
+    fino = Side(style="thin")
+    for cel in ws[1]:
+        cel.font = Font(bold=True)
+        cel.alignment = Alignment(horizontal="center", vertical="center")
+        cel.border = Border(top=fino, bottom=fino, left=fino, right=fino)
+        cel.fill = PatternFill("solid", fgColor="D9E1F2")
+    for d, socio, empresa in lancamentos:
+        codigo = empresa.codigo or ""
+        ws.append([
+            int(codigo) if codigo.isdigit() else codigo,
+            empresa.razao_social,
+            empresa.cnpj_formatado,
+            socio.nome,
+            fmt_documento(socio.documento),
+            d.valor,
+            f"{d.mes:02d}/{d.ano}",
+        ])
+        ws.cell(ws.max_row, 6).number_format = "#,##0.00"
+    for letra, largura in zip("ABCDEFG", [10, 50, 20, 40, 20, 16, 10]):
+        ws.column_dimensions[letra].width = largura
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = f"A1:G{ws.max_row}"
+    saida = BytesIO()
+    wb.save(saida)
+    saida.seek(0)
+    return saida
+
+
+@bp.route("/exportar")
+def exportar():
+    """Tela para escolher o período e baixar as distribuições em Excel."""
+    from flask import send_file
+
+    ano = _ano()
+    mes_de = _mes("de", 1)
+    mes_ate = max(_mes("ate", 12), mes_de)
+    empresa = db.session.get(Empresa, request.args.get("empresa", type=int) or 0)
+    lancamentos = _lancamentos(ano, mes_de, mes_ate, empresa.id if empresa else None)
+    if request.args.get("baixar"):
+        if not lancamentos:
+            flash("Nenhuma distribuição lançada nesse período.", "warning")
+        else:
+            nome = f"distribuicao_lucros_{ano}"
+            if (mes_de, mes_ate) != (1, 12):
+                nome += f"_{mes_de:02d}" + (f"-{mes_ate:02d}" if mes_ate != mes_de else "")
+            if empresa:
+                nome += f"_{empresa.codigo or empresa.id}"
+            return send_file(
+                _planilha(lancamentos), as_attachment=True, download_name=nome + ".xlsx",
+                mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
+    anos = sorted({a for (a,) in db.session.query(DistribuicaoLucro.ano).distinct()}
+                  | {date.today().year}, reverse=True)
+    return render_template(
+        "distribuicao/exportar.html", ano=ano, anos=anos, mes_de=mes_de, mes_ate=mes_ate,
+        meses=MESES, empresa=empresa, quantidade=len(lancamentos),
+        clientes=len({e.id for _, _, e in lancamentos}),
+        total=sum((d.valor for d, _, _ in lancamentos), Decimal("0")),
+    )
