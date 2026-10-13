@@ -5,7 +5,13 @@
 
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h2 class="h5 mb-0">LALUR · {{ rotulo }} de {{ ano }}</h2>
-  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano) }}">← Resumo de {{ ano }}</a>
+  <div class="d-flex gap-2">
+    {% if d %}
+    <a class="btn btn-sm btn-outline-danger" href="{{ url_for('lalur.exportar', id=empresa.id, ano=ano, periodo=periodo, formato='pdf') }}">PDF</a>
+    <a class="btn btn-sm btn-outline-success" href="{{ url_for('lalur.exportar', id=empresa.id, ano=ano, periodo=periodo, formato='xlsx') }}">Excel</a>
+    {% endif %}
+    <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano) }}">← Resumo de {{ ano }}</a>
+  </div>
 </div>
 
 <div class="row g-4">

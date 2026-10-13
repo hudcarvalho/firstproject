@@ -36,6 +36,40 @@ SUGESTOES_EXCLUSAO = [
 ]
 
 
+# Linhas do demonstrativo: (rótulo, valor no Demonstrativo, estilo). Estilo "secao" = título.
+LINHAS = [
+    ("Lucro líquido antes do IRPJ/CSLL", lambda d: d.apuracao.lucro_antes, ""),
+    ("IRPJ", None, "secao"),
+    ("(+) Adições", lambda d: d.irpj.adicoes, ""),
+    ("(−) Exclusões", lambda d: d.irpj.exclusoes, ""),
+    ("= Lucro ajustado", lambda d: d.irpj.ajustado, "subtotal"),
+    ("(−) Compensação de prejuízo fiscal", lambda d: d.irpj.compensacao, ""),
+    ("= Lucro real", lambda d: d.irpj.base, "subtotal"),
+    ("IRPJ 15%", lambda d: d.irpj_normal, ""),
+    ("Adicional 10%", lambda d: d.irpj_adicional, ""),
+    ("(−) Deduções (retenções/antecipações)", lambda d: d.apuracao.irpj_deduzir, ""),
+    ("IRPJ a pagar", lambda d: d.irpj_a_pagar, "total"),
+    ("CSLL", None, "secao"),
+    ("(+) Adições", lambda d: d.csll.adicoes, ""),
+    ("(−) Exclusões", lambda d: d.csll.exclusoes, ""),
+    ("= Base ajustada", lambda d: d.csll.ajustado, "subtotal"),
+    ("(−) Compensação de base negativa", lambda d: d.csll.compensacao, ""),
+    ("= Base de cálculo", lambda d: d.csll.base, "subtotal"),
+    ("CSLL devida", lambda d: d.csll_devida, ""),
+    ("(−) Deduções (retenções/antecipações)", lambda d: d.apuracao.csll_deduzir, ""),
+    ("CSLL a pagar", lambda d: d.csll_a_pagar, "total"),
+    ("Parte B — saldos ao final do período", None, "secao"),
+    ("Prejuízo fiscal a compensar (IRPJ)", lambda d: d.irpj.saldo_final, ""),
+    ("Base negativa a compensar (CSLL)", lambda d: d.csll.saldo_final, ""),
+]
+
+
+def rotulo_periodo(periodo, curto=False):
+    if periodo == 0:
+        return "Anual"
+    return f"{periodo}º trim." if curto else f"{periodo}º trimestre"
+
+
 def _q(v):
     return v.quantize(Decimal("0.01"), rounding=ROUND_HALF_UP)
 
@@ -179,11 +213,12 @@ def empresa(id):
     periodos = [0] if modo == "anual" else [1, 2, 3, 4]
     calc, _ = demonstrativos(empresa)
     existentes = {a.periodo: a for a in LalurApuracao.query.filter_by(empresa_id=empresa.id, ano=ano)}
-    colunas = [{"periodo": p, "rotulo": "Anual" if p == 0 else f"{p}º trim.",
+    colunas = [{"periodo": p, "rotulo": rotulo_periodo(p, curto=True),
                 "apuracao": existentes.get(p), "d": calc.get((ano, p))} for p in periodos]
     abertura = LalurSaldoInicial.query.filter_by(empresa_id=empresa.id).first()
     return render_template("lalur/empresa.html", empresa=empresa, ano=ano, modo=modo,
-                           modo_fixo=modo_fixo, colunas=colunas, abertura=abertura)
+                           modo_fixo=modo_fixo, colunas=colunas, abertura=abertura, linhas=LINHAS,
+                           apurados=[c for c in colunas if c["d"]])
 
 
 @bp.post("/<int:id>/saldo-inicial")
@@ -232,7 +267,7 @@ def periodo(id, ano, periodo):
     periodo = _periodo(periodo)
     apuracao = _obter_apuracao(empresa, ano, periodo)
     calc, _ = demonstrativos(empresa)
-    rotulo = "Anual" if periodo == 0 else f"{periodo}º trimestre"
+    rotulo = rotulo_periodo(periodo)
     return render_template(
         "lalur/periodo.html", empresa=empresa, ano=ano, periodo=periodo, rotulo=rotulo,
         apuracao=apuracao, d=calc.get((ano, periodo)), tipos=LalurLancamento.TIPOS,
@@ -321,3 +356,215 @@ def excluir(id, ano, periodo):
         db.session.commit()
         flash("Apuração do período excluída.", "success")
     return redirect(url_for("lalur.empresa", id=id, ano=ano))
+
+
+# ---------------------------------------------------------------- exportação (PDF e Excel)
+
+def _fmt(v):
+    from .competencia import fmt_valor
+    return fmt_valor(v) if v is not None else ""
+
+
+def _nome_arquivo(empresa, ano, periodos, extensao):
+    sufixo = "todos" if len(periodos) > 1 else ("anual" if periodos[0][0] == 0 else f"{periodos[0][0]}tri")
+    return f"lalur_{empresa.codigo or empresa.id}_{ano}_{sufixo}.{extensao}"
+
+
+def _pdf(empresa, ano, periodos):
+    """periodos: [(periodo, Demonstrativo)] já apurados."""
+    from .pdf_simples import Documento
+
+    doc = Documento(f"LALUR {ano} - {empresa.razao_social}")
+    margem, largura_util = 36, doc.largura_pagina - 72
+    direita = margem + largura_util
+    y = 0
+    pagina = [0]
+
+    def cabecalho():
+        nonlocal y
+        pagina[0] += 1
+        doc.texto(margem, 40, "LALUR — Livro de Apuração do Lucro Real", 13, negrito=True)
+        doc.texto(direita, 40, f"Exercício {ano}", 11, negrito=True, alinhar="direita")
+        doc.texto(margem, 56, empresa.razao_social, 10)
+        info = " · ".join(x for x in [f"Cód. {empresa.codigo}" if empresa.codigo else "",
+                                       f"CNPJ {empresa.cnpj_formatado}", empresa.regime.nome] if x)
+        doc.texto(margem, 69, info, 8.5, cinza=0.35)
+        doc.linha(margem, 76, direita, 76, 1, 0.3)
+        doc.texto(margem, doc.altura_pagina - 24,
+                  f"Emitido em {date.today():%d/%m/%Y} pelo Controle de Rotina", 7.5, cinza=0.45)
+        doc.texto(direita, doc.altura_pagina - 24, f"Página {pagina[0]}", 7.5, alinhar="direita", cinza=0.45)
+        y = 96
+
+    def espaco(altura):
+        nonlocal y
+        if y + altura > doc.altura_pagina - 44:
+            doc.nova_pagina()
+            cabecalho()
+
+    def titulo(texto):
+        nonlocal y
+        espaco(40)
+        doc.texto(margem, y, texto, 11, negrito=True)
+        y += 10
+
+    def tabela(cabecalhos, larguras, linhas, alinhar_numeros=True):
+        """linhas: [(celulas, estilo)]; 1ª coluna texto, demais valores à direita."""
+        nonlocal y
+        alt = 14
+
+        def topo():
+            nonlocal y
+            doc.faixa(margem, y, largura_util, alt, 0.85)
+            x = margem
+            for i, (c, w) in enumerate(zip(cabecalhos, larguras)):
+                if i == 0 or not alinhar_numeros:
+                    doc.texto(x + 4, y + 10, c, 8.5, negrito=True)
+                else:
+                    doc.texto(x + w - 4, y + 10, c, 8.5, negrito=True, alinhar="direita")
+                x += w
+            y += alt
+
+        espaco(alt * 3)
+        topo()
+        for celulas, estilo in linhas:
+            if y + alt > doc.altura_pagina - 44:
+                doc.nova_pagina()
+                cabecalho()
+                topo()
+            if estilo == "secao":
+                doc.faixa(margem, y, largura_util, alt, 0.95)
+                doc.texto(margem + 4, y + 10, celulas[0].upper(), 7.5, negrito=True, cinza=0.35)
+            else:
+                negrito = estilo in ("subtotal", "total")
+                if estilo == "total":
+                    doc.faixa(margem, y, largura_util, alt, 0.97)
+                x = margem
+                for i, (c, w) in enumerate(zip(celulas, larguras)):
+                    if i == 0 or not alinhar_numeros:
+                        doc.texto(x + 4, y + 10, c, 8.5, negrito=negrito)
+                    else:
+                        doc.texto(x + w - 4, y + 10, c, 8.5, negrito=negrito, alinhar="direita")
+                    x += w
+                doc.linha(margem, y + alt, direita, y + alt, 0.3, 0.8)
+            y += alt
+        y += 14
+
+    cabecalho()
+    # Parte A: uma coluna por período
+    rot = largura_util * (0.42 if len(periodos) > 1 else 0.65)
+    col = (largura_util - rot) / len(periodos)
+    titulo("Parte A — Demonstração do lucro real e cálculo do IRPJ e da CSLL")
+    linhas = []
+    for rotulo, valor, estilo in LINHAS:
+        if estilo == "secao":
+            linhas.append(([rotulo], "secao"))
+        else:
+            linhas.append(([rotulo] + [_fmt(valor(d)) for _, d in periodos], estilo))
+    tabela(["R$"] + [rotulo_periodo(p, curto=True) for p, _ in periodos],
+           [rot] + [col] * len(periodos), linhas)
+
+    # Adições e exclusões de cada período
+    for p, d in periodos:
+        itens = d.apuracao.lancamentos
+        titulo(f"Adições e exclusões — {rotulo_periodo(p)}")
+        if not itens:
+            espaco(16)
+            doc.texto(margem, y + 6, "Nenhuma adição ou exclusão lançada.", 8.5, cinza=0.4)
+            y += 24
+        else:
+            larguras = [70, largura_util - 70 - 90 - 90, 90, 90]
+            tabela(["Tipo", "Descrição", "Tributo", "Valor (R$)"], larguras,
+                   [([LalurLancamento.TIPOS[l.tipo], l.descricao[:80],
+                      LalurLancamento.TRIBUTOS[l.tributo], _fmt(l.valor)], "") for l in itens],
+                   alinhar_numeros=False)
+        if d.apuracao.observacao:
+            espaco(16)
+            doc.texto(margem, y + 6, f"Observação: {d.apuracao.observacao[:140]}", 8.5, cinza=0.3)
+            y += 22
+    return doc.gerar()
+
+
+def _excel(empresa, ano, periodos):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    negrito = Font(bold=True)
+    fundo = PatternFill("solid", fgColor="D9E1F2")
+    secao = PatternFill("solid", fgColor="F2F2F2")
+    numero = "#,##0.00;-#,##0.00"
+
+    def cabecalho(ws):
+        ws.append(["LALUR — Livro de Apuração do Lucro Real", None, f"Exercício {ano}"])
+        ws["A1"].font = Font(bold=True, size=13)
+        ws.append([empresa.razao_social])
+        ws.append([f"Cód. {empresa.codigo or '-'} · CNPJ {empresa.cnpj_formatado} · {empresa.regime.nome}"])
+        ws.append([])
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Parte A"
+    cabecalho(ws)
+    ws.append(["R$"] + [rotulo_periodo(p, curto=True) for p, _ in periodos])
+    for c in ws[ws.max_row]:
+        c.font, c.fill = negrito, fundo
+        c.alignment = Alignment(horizontal="center")
+    for rotulo, valor, estilo in LINHAS:
+        if estilo == "secao":
+            ws.append([rotulo])
+            for c in ws[ws.max_row][:1 + len(periodos)]:
+                c.fill, c.font = secao, negrito
+            continue
+        ws.append([rotulo] + [valor(d) for _, d in periodos])
+        for c in ws[ws.max_row][1:]:
+            c.number_format = numero
+        if estilo in ("subtotal", "total"):
+            for c in ws[ws.max_row]:
+                c.font = negrito
+    ws.column_dimensions["A"].width = 42
+    for i in range(len(periodos)):
+        ws.column_dimensions[chr(ord("B") + i)].width = 16
+    ws.freeze_panes = "B6"
+
+    lanc = wb.create_sheet("Adições e exclusões")
+    cabecalho(lanc)
+    lanc.append(["Período", "Tipo", "Descrição", "Tributo", "Valor (R$)"])
+    for c in lanc[lanc.max_row]:
+        c.font, c.fill = negrito, fundo
+    for p, d in periodos:
+        for l in d.apuracao.lancamentos:
+            lanc.append([rotulo_periodo(p), LalurLancamento.TIPOS[l.tipo], l.descricao,
+                         LalurLancamento.TRIBUTOS[l.tributo], l.valor])
+            lanc.cell(lanc.max_row, 5).number_format = numero
+    for letra, w in zip("ABCDE", [14, 10, 50, 14, 16]):
+        lanc.column_dimensions[letra].width = w
+    saida = BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
+
+
+@bp.route("/<int:id>/<int:ano>/exportar")
+def exportar(id, ano):
+    """?periodo=todos (todos os apurados do exercício) ou 0-4; ?formato=pdf ou xlsx."""
+    from flask import Response
+
+    empresa = _empresa(id)
+    if (r := _exige_lucro_real(empresa)):
+        return r
+    calc, _ = demonstrativos(empresa)
+    do_ano = sorted(((p, d) for (a, p), d in calc.items() if a == ano), key=lambda x: x[0] or 5)
+    escolha = request.args.get("periodo", "todos")
+    periodos = do_ano if escolha == "todos" else [(p, d) for p, d in do_ano if str(p) == escolha]
+    if not periodos:
+        flash("Não há período apurado para exportar (informe o lucro e salve a apuração).", "warning")
+        return redirect(url_for("lalur.empresa", id=id, ano=ano))
+    if request.args.get("formato") == "xlsx":
+        conteudo = _excel(empresa, ano, periodos)
+        tipo, extensao = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "xlsx"
+    else:
+        conteudo = _pdf(empresa, ano, periodos)
+        tipo, extensao = "application/pdf", "pdf"
+    nome = _nome_arquivo(empresa, ano, periodos, extensao)
+    return Response(conteudo, mimetype=tipo,
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})

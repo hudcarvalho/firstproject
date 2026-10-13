@@ -62,7 +62,8 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   ajustado, IRPJ 15% + adicional de 10% sobre o que passar de R$ 20.000,00/mês, CSLL (alíquota
   editável, padrão 9%) e deduções de retenções/antecipações. Parte B com saldos de abertura e
   saldos de prejuízo fiscal e base negativa encadeados automaticamente período a período; resumo
-  do ano com todos os trimestres lado a lado.
+  do ano com todos os trimestres lado a lado. Exporta em **PDF** e **Excel** todos os períodos
+  apurados do exercício ou um período só (barra "Exportar" no resumo e botões na tela do período).
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

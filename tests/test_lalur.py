@@ -95,3 +95,41 @@ def test_formularios_lalur_com_csrf(client, app, empresa_lr):
         for form in re.findall(r"<form\b[^>]*>.*?</form>", html, flags=re.S | re.I):
             if re.search(r'method="post"', form, flags=re.I):
                 assert 'name="csrf_token"' in form, form[:160]
+
+
+def test_exportar_pdf_e_excel(client, app, empresa_lr):
+    from io import BytesIO
+
+    from openpyxl import load_workbook
+
+    url = f"/lalur/{empresa_lr}"
+    assert client.get(f"{url}/2026/exportar").status_code == 302  # nada apurado ainda
+    client.post(f"{url}/2026/1", data={"lucro_antes": "29.480,47"})
+    client.post(f"{url}/2026/1/lancamentos", data={"tipo": "adicao", "descricao": "Multas e ação fiscal", "valor": "1.000"})
+    client.post(f"{url}/2026/2", data={"lucro_antes": "70.455,22"})
+    client.post(f"{url}/2026/3/lancamentos", data={"tipo": "adicao", "descricao": "Sem lucro", "valor": "1"})
+
+    tela = client.get(f"{url}?ano=2026").get_data(as_text=True)
+    assert "Todos os períodos apurados de 2026 (2)" in tela and "Só o 2º trim." in tela
+    assert "Só o 3º trim." not in tela  # sem lucro informado não conta como apurado
+
+    r = client.get(f"{url}/2026/exportar?periodo=todos&formato=pdf")
+    assert r.mimetype == "application/pdf" and r.data.startswith(b"%PDF") and r.data.rstrip().endswith(b"%%EOF")
+    assert "lalur_2120_2026_todos.pdf" in r.headers["Content-Disposition"]
+    assert "1º trim.".encode("cp1252") in r.data and "2º trim.".encode("cp1252") in r.data
+    assert "Multas e ação fiscal".encode("cp1252") in r.data
+
+    r = client.get(f"{url}/2026/exportar?periodo=2&formato=xlsx")
+    assert "lalur_2120_2026_2tri.xlsx" in r.headers["Content-Disposition"]
+    wb = load_workbook(BytesIO(r.data))
+    ws = wb["Parte A"]
+    linhas = list(ws.iter_rows(values_only=True))
+    assert linhas[4][:2] == ("R$", "2º trim.")
+    assert linhas[5][:2] == ("Lucro líquido antes do IRPJ/CSLL", 70455.22)
+    assert any(l[0] == "IRPJ a pagar" for l in linhas)
+
+    r = client.get(f"{url}/2026/exportar?periodo=todos&formato=xlsx")
+    wb = load_workbook(BytesIO(r.data))
+    assert list(wb["Parte A"].iter_rows(values_only=True))[4][:3] == ("R$", "1º trim.", "2º trim.")
+    lanc = list(wb["Adições e exclusões"].iter_rows(values_only=True))
+    assert lanc[5] == ("1º trimestre", "Adição", "Multas e ação fiscal", "IRPJ e CSLL", 1000)
