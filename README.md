@@ -64,6 +64,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   saldos de prejuízo fiscal e base negativa encadeados automaticamente período a período; resumo
   do ano com todos os trimestres lado a lado. Exporta em **PDF** e **Excel** todos os períodos
   apurados do exercício ou um período só (barra "Exportar" no resumo e botões na tela do período).
+  O botão **Guia (DARF)** do período calcula o pagamento em **quota única** ou **parcelado** (até 3
+  quotas de no mínimo R$ 1.000,00; 2ª com juros de 1%, 3ª com Selic + 1%), com vencimentos e códigos
+  de receita (editáveis), e gera um PDF com os dados de cada campo do DARF. O DARF com código de barras
+  é numerado pela Receita Federal: emita-o no Sicalc Web ou na DCTFWeb com esses dados.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o
