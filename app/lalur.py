@@ -568,3 +568,56 @@ def exportar(id, ano):
     nome = _nome_arquivo(empresa, ano, periodos, extensao)
     return Response(conteudo, mimetype=tipo,
                     headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+
+
+# ---------------------------------------------------------------- dados para o DARF
+
+@bp.route("/<int:id>/<int:ano>/<int:periodo>/guia")
+def guia(id, ano, periodo):
+    """Quota única ou parcelado: quotas, vencimentos, juros e campos do DARF (tela e PDF)."""
+    from flask import Response
+
+    from . import guia_darf
+
+    empresa = _empresa(id)
+    if (r := _exige_lucro_real(empresa)):
+        return r
+    periodo = _periodo(periodo)
+    calc, _ = demonstrativos(empresa)
+    d = calc.get((ano, periodo))
+    if d is None or (d.irpj_a_pagar <= 0 and d.csll_a_pagar <= 0):
+        flash("Não há IRPJ nem CSLL a pagar neste período.", "warning")
+        return _voltar_periodo(id, ano, periodo)
+    a = request.args
+    anual = periodo == 0
+    forma = "unica" if anual or a.get("forma") != "parcelado" else "parcelado"
+    try:
+        parcelas = 1 if forma == "unica" else int(a.get("parcelas", "3"))
+    except ValueError:
+        parcelas = 3
+    try:
+        selic = parse_valor(a.get("selic"))
+    except ValueError:
+        selic = None
+        flash("Selic inválida: informe o percentual, como 1,05.", "warning")
+    padrao = guia_darf.CODIGOS["anual" if anual else "trimestral"]
+    codigos = {t: (a.get(f"cod_{t}") or padrao[t]).strip()[:6] for t in ("irpj", "csll")}
+    guias, avisos = [], []
+    for tributo, chave, valor in (("IRPJ", "irpj", d.irpj_a_pagar), ("CSLL", "csll", d.csll_a_pagar)):
+        lista, aviso = guia_darf.quotas(valor, ano, periodo, parcelas, selic)
+        if lista:
+            guias.append((tributo, codigos[chave], lista))
+        if aviso:
+            avisos.append(f"{tributo}: {aviso}")
+    if a.get("baixar"):
+        conteudo = guia_darf.pdf(empresa, ano, periodo, guias, forma)
+        nome = (f"darf_dados_{empresa.codigo or empresa.id}_{ano}_"
+                f"{'anual' if anual else f'{periodo}tri'}_{forma}.pdf")
+        return Response(conteudo, mimetype="application/pdf",
+                        headers={"Content-Disposition": f'attachment; filename="{nome}"'})
+    return render_template(
+        "lalur/guia.html", empresa=empresa, ano=ano, periodo=periodo, rotulo=rotulo_periodo(periodo),
+        d=d, forma=forma, parcelas=parcelas, selic=selic, codigos=codigos, guias=guias,
+        avisos=avisos, anual=anual, apuracao=guia_darf.fim_do_periodo(ano, periodo),
+        sicalc=guia_darf.SICALC,
+    )

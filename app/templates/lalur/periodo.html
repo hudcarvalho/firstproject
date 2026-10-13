@@ -9,6 +9,9 @@
     {% if d %}
     <a class="btn btn-sm btn-outline-danger" href="{{ url_for('lalur.exportar', id=empresa.id, ano=ano, periodo=periodo, formato='pdf') }}">PDF</a>
     <a class="btn btn-sm btn-outline-success" href="{{ url_for('lalur.exportar', id=empresa.id, ano=ano, periodo=periodo, formato='xlsx') }}">Excel</a>
+    {% if d.irpj_a_pagar > 0 or d.csll_a_pagar > 0 %}
+    <a class="btn btn-sm btn-primary" href="{{ url_for('lalur.guia', id=empresa.id, ano=ano, periodo=periodo) }}">Guia (DARF)</a>
+    {% endif %}
     {% endif %}
     <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('lalur.empresa', id=empresa.id, ano=ano) }}">← Resumo de {{ ano }}</a>
   </div>

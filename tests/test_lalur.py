@@ -133,3 +133,30 @@ def test_exportar_pdf_e_excel(client, app, empresa_lr):
     assert list(wb["Parte A"].iter_rows(values_only=True))[4][:3] == ("R$", "1º trim.", "2º trim.")
     lanc = list(wb["Adições e exclusões"].iter_rows(values_only=True))
     assert lanc[5] == ("1º trimestre", "Adição", "Multas e ação fiscal", "IRPJ e CSLL", 1000)
+
+
+def test_guia_darf_quotas_e_pdf(client, app, empresa_lr):
+    from datetime import date
+
+    from app.guia_darf import quotas, ultimo_dia_util
+
+    assert ultimo_dia_util(2026, 5) == date(2026, 5, 29)  # 31/05/2026 é domingo
+    lista, aviso = quotas(D("1500"), 2026, 2, 3)
+    assert len(lista) == 1 and "quota única" in aviso
+    lista, _ = quotas(D("7793.28"), 2026, 2, 3, selic=D("1.05"))
+    assert [q.vencimento for q in lista] == [date(2026, 7, 31), date(2026, 8, 31), date(2026, 9, 30)]
+    assert sum(q.principal for q in lista) == D("7793.28")
+    assert lista[1].juros == D("25.98") and lista[2].juros_pct == D("2.05")
+    assert quotas(D("5000"), 2026, 0, 3)[0][0].vencimento == date(2027, 3, 31)
+
+    url = f"/lalur/{empresa_lr}/2026/2"
+    assert client.get(f"{url}/guia").status_code == 302  # nada apurado
+    client.post(url, data={"lucro_antes": "70.455,22"})
+    assert "Guia (DARF)" in client.get(url).get_data(as_text=True)
+    tela = client.get(f"{url}/guia?forma=parcelado&parcelas=3").get_data(as_text=True)
+    assert "0220" in tela and "6012" in tela and "3ª de 3" in tela and "Selic + 1%" in tela
+    assert "código de barras" in tela
+    r = client.get(f"{url}/guia?forma=unica&baixar=1")
+    assert r.mimetype == "application/pdf" and r.data.startswith(b"%PDF")
+    assert "darf_dados_2120_2026_2tri_unica.pdf" in r.headers["Content-Disposition"]
+    assert b"11.613,80" in r.data and "NÃO é documento de arrecadação".encode("cp1252") in r.data
