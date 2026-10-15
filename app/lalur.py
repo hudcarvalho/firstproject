@@ -61,6 +61,11 @@ LINHAS = [
     ("Parte B — saldos ao final do período", None, "secao"),
     ("Prejuízo fiscal a compensar (IRPJ)", lambda d: d.irpj.saldo_final, ""),
     ("Base negativa a compensar (CSLL)", lambda d: d.csll.saldo_final, ""),
+    ("Resultado do período", None, "secao"),
+    ("Lucro líquido antes do IRPJ/CSLL", lambda d: d.apuracao.lucro_antes, ""),
+    ("(−) IRPJ devido", lambda d: d.irpj_devido, ""),
+    ("(−) CSLL devida", lambda d: d.csll_devida, ""),
+    ("= Lucro líquido do período", lambda d: d.lucro_liquido, "total"),
 ]
 
 
@@ -107,6 +112,11 @@ class Demonstrativo:
     @property
     def irpj_a_pagar(self):
         return max(self.irpj_devido - self.apuracao.irpj_deduzir, ZERO)
+
+    @property
+    def lucro_liquido(self):
+        """Lucro líquido do período depois do IRPJ e da CSLL devidos."""
+        return self.apuracao.lucro_antes - self.irpj_devido - self.csll_devida
 
     @property
     def csll_a_pagar(self):

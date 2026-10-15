@@ -61,7 +61,8 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   sugestões de descrição), compensação de prejuízo fiscal / base negativa limitada a 30% do lucro
   ajustado, IRPJ 15% + adicional de 10% sobre o que passar de R$ 20.000,00/mês, CSLL (alíquota
   editável, padrão 9%) e deduções de retenções/antecipações. Parte B com saldos de abertura e
-  saldos de prejuízo fiscal e base negativa encadeados automaticamente período a período; resumo
+  saldos de prejuízo fiscal e base negativa encadeados automaticamente período a período; ao final,
+  o **lucro líquido do período** (lucro antes do IRPJ/CSLL menos IRPJ e CSLL devidos); resumo
   do ano com todos os trimestres lado a lado. Exporta em **PDF** e **Excel** todos os períodos
   apurados do exercício ou um período só (barra "Exportar" no resumo e botões na tela do período).
   O botão **Guia (DARF)** do período calcula o pagamento em **quota única** ou **parcelado** (até 3
