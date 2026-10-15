@@ -114,6 +114,11 @@
         <tr class="table-light"><th colspan="2" class="small text-uppercase text-muted">Parte B — saldos ao final</th></tr>
         <tr><td>Prejuízo fiscal a compensar{% if d.irpj.gerado %} <span class="small text-danger">(+{{ d.irpj.gerado | valor }} no período)</span>{% endif %}</td><td class="text-end">{{ d.irpj.saldo_final | valor }}</td></tr>
         <tr><td>Base negativa a compensar{% if d.csll.gerado %} <span class="small text-danger">(+{{ d.csll.gerado | valor }} no período)</span>{% endif %}</td><td class="text-end">{{ d.csll.saldo_final | valor }}</td></tr>
+        <tr class="table-light"><th colspan="2" class="small text-uppercase text-muted">Resultado do período</th></tr>
+        <tr><td>Lucro líquido antes do IRPJ/CSLL</td><td class="text-end">{{ d.apuracao.lucro_antes | valor }}</td></tr>
+        <tr><td>(−) IRPJ devido</td><td class="text-end">{{ d.irpj_devido | valor }}</td></tr>
+        <tr><td>(−) CSLL devida</td><td class="text-end">{{ d.csll_devida | valor }}</td></tr>
+        <tr class="fw-bold table-success"><td>= Lucro líquido do período</td><td class="text-end">{{ d.lucro_liquido | valor }}</td></tr>
       </tbody>
     </table>
     {% else %}

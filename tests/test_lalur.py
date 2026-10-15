@@ -46,6 +46,7 @@ def test_apuracao_trimestral_encadeada(client, app, empresa_lr):
     assert d1.irpj_adicional == D("1350.00") and d1.irpj_a_pagar == D("11375.00")
     assert d1.csll.ajustado == D("110000") and d1.csll.compensacao == D("20000")
     assert d1.csll_devida == D("8100.00") and d1.csll.saldo_final == 0
+    assert d1.lucro_liquido == D("100000") - D("12375.00") - D("8100.00")  # 79.525,00
     d2 = calc[(2026, 2)]
     assert d2.irpj.gerado == D("30000") and d2.irpj.saldo_final == D("48500.00")
     assert d2.irpj_a_pagar == 0 and d2.csll.saldo_final == D("30000")
@@ -55,6 +56,7 @@ def test_apuracao_trimestral_encadeada(client, app, empresa_lr):
 
     resumo = client.get(f"{url}?ano=2026").get_data(as_text=True)
     assert "11.375,00" in resumo and "42.500,00" in resumo
+    assert "= Lucro líquido do período" in resumo and "79.525,00" in resumo
     tela = client.get(t1).get_data(as_text=True)
     assert "Multas" in tela and "73.500,00" in tela
 
@@ -127,6 +129,7 @@ def test_exportar_pdf_e_excel(client, app, empresa_lr):
     assert linhas[4][:2] == ("R$", "2º trim.")
     assert linhas[5][:2] == ("Lucro líquido antes do IRPJ/CSLL", 70455.22)
     assert any(l[0] == "IRPJ a pagar" for l in linhas)
+    assert linhas[-1][0] == "= Lucro líquido do período"
 
     r = client.get(f"{url}/2026/exportar?periodo=todos&formato=xlsx")
     wb = load_workbook(BytesIO(r.data))
