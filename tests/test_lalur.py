@@ -126,16 +126,26 @@ def test_exportar_pdf_e_excel(client, app, empresa_lr):
     wb = load_workbook(BytesIO(r.data))
     ws = wb["Parte A"]
     linhas = list(ws.iter_rows(values_only=True))
-    assert linhas[4][:2] == ("R$", "2º trim.")
-    assert linhas[5][:2] == ("Lucro líquido antes do IRPJ/CSLL", 70455.22)
-    assert any(l[0] == "IRPJ a pagar" for l in linhas)
-    assert linhas[-1][0] == "= Lucro líquido do período"
+    assert linhas[4] == ("R$", "2º trim.", "Fórmula / critério")
+    por_rotulo = {l[0]: l[1:] for l in linhas if l[0]}
+    assert por_rotulo["Lucro líquido antes do IRPJ/CSLL"][0] == 70455.22
+    # o cálculo é feito por fórmulas do Excel, com a explicação ao lado
+    assert por_rotulo["= Lucro ajustado"][0].startswith("=B")
+    formula_irpj, explicacao = por_rotulo["IRPJ 15%"]
+    assert formula_irpj.startswith("=ROUND(") and "'Parâmetros'!$B$2" in formula_irpj
+    assert explicacao == "Lucro real × 15%"
+    assert por_rotulo["= Lucro líquido do período"][0].startswith("=")
+    assert por_rotulo["(+) Adições"][0].startswith("=SUMIFS(")
+    assert wb["Parâmetros"]["B2"].value == 0.15 and wb["Parâmetros"]["B5"].value == 0.3
 
     r = client.get(f"{url}/2026/exportar?periodo=todos&formato=xlsx")
     wb = load_workbook(BytesIO(r.data))
-    assert list(wb["Parte A"].iter_rows(values_only=True))[4][:3] == ("R$", "1º trim.", "2º trim.")
+    ws = wb["Parte A"]
+    assert list(ws.iter_rows(values_only=True))[4][:3] == ("R$", "1º trim.", "2º trim.")
+    saldo_anterior = next(r for r in ws.iter_rows() if r[0].value == "Prejuízo fiscal a compensar (saldo anterior)")
+    assert saldo_anterior[1].value == 0 and saldo_anterior[2].value.startswith("=B")  # encadeado
     lanc = list(wb["Adições e exclusões"].iter_rows(values_only=True))
-    assert lanc[5] == ("1º trimestre", "Adição", "Multas e ação fiscal", "IRPJ e CSLL", 1000)
+    assert lanc[5] == ("1º trim.", "Adição", "Multas e ação fiscal", "IRPJ e CSLL", 1000)
 
 
 def test_guia_darf_quotas_e_pdf(client, app, empresa_lr):

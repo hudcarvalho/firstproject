@@ -65,6 +65,9 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   o **lucro líquido do período** (lucro antes do IRPJ/CSLL menos IRPJ e CSLL devidos); resumo
   do ano com todos os trimestres lado a lado. Exporta em **PDF** e **Excel** todos os períodos
   apurados do exercício ou um período só (barra "Exportar" no resumo e botões na tela do período).
+  No Excel, o cálculo vem em **fórmulas** (com a explicação de cada uma ao lado): dados informados em
+  amarelo, adições/exclusões somadas da aba própria, alíquotas e limites na aba "Parâmetros" e saldos
+  da Parte B encadeados entre as colunas.
   O botão **Guia (DARF)** do período calcula o pagamento em **quota única** ou **parcelado** (até 3
   quotas de no mínimo R$ 1.000,00; 2ª com juros de 1%, 3ª com Selic + 1%), com vencimentos e códigos
   de receita (editáveis), e gera um PDF com os dados de cada campo do DARF. O DARF com código de barras
