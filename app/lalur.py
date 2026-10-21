@@ -495,15 +495,22 @@ def _pdf(empresa, ano, periodos):
 
 
 def _excel(empresa, ano, periodos):
+    """Planilha com fórmulas: os dados digitados entram como valores e todo o cálculo do LALUR
+    (adições, exclusões, compensação, IRPJ, adicional, CSLL, saldos da Parte B e lucro líquido)
+    é feito por fórmulas do Excel, com a explicação de cada uma na última coluna."""
     from io import BytesIO
 
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
+    from openpyxl.utils import get_column_letter
+    from openpyxl.workbook.properties import CalcProperties
 
     negrito = Font(bold=True)
     fundo = PatternFill("solid", fgColor="D9E1F2")
     secao = PatternFill("solid", fgColor="F2F2F2")
+    entrada = PatternFill("solid", fgColor="FFF2CC")  # células digitáveis
     numero = "#,##0.00;-#,##0.00"
+    cinza = Font(color="666666", italic=True)
 
     def cabecalho(ws):
         ws.append(["LALUR — Livro de Apuração do Lucro Real", None, f"Exercício {ano}"])
@@ -515,28 +522,28 @@ def _excel(empresa, ano, periodos):
     wb = Workbook()
     ws = wb.active
     ws.title = "Parte A"
-    cabecalho(ws)
-    ws.append(["R$"] + [rotulo_periodo(p, curto=True) for p, _ in periodos])
-    for c in ws[ws.max_row]:
-        c.font, c.fill = negrito, fundo
-        c.alignment = Alignment(horizontal="center")
-    for rotulo, valor, estilo in LINHAS:
-        if estilo == "secao":
-            ws.append([rotulo])
-            for c in ws[ws.max_row][:1 + len(periodos)]:
-                c.fill, c.font = secao, negrito
-            continue
-        ws.append([rotulo] + [valor(d) for _, d in periodos])
-        for c in ws[ws.max_row][1:]:
-            c.number_format = numero
-        if estilo in ("subtotal", "total"):
-            for c in ws[ws.max_row]:
-                c.font = negrito
-    ws.column_dimensions["A"].width = 42
-    for i in range(len(periodos)):
-        ws.column_dimensions[chr(ord("B") + i)].width = 16
-    ws.freeze_panes = "B6"
 
+    # ---- Parâmetros (referenciados pelas fórmulas)
+    par = wb.create_sheet("Parâmetros")
+    parametros = [
+        ("Alíquota do IRPJ", ALIQUOTA_IRPJ, "0.00%"),
+        ("Alíquota do adicional de IRPJ", ALIQUOTA_ADICIONAL, "0.00%"),
+        ("Parcela isenta do adicional por mês (R$)", LIMITE_ADICIONAL_MES, numero),
+        ("Limite de compensação de prejuízo / base negativa", LIMITE_COMPENSACAO, "0.00%"),
+    ]
+    par.append(["Parâmetro", "Valor"])
+    for c in par[1]:
+        c.font, c.fill = negrito, fundo
+    for nome, valor, formato in parametros:
+        par.append([nome, valor])
+        par.cell(par.max_row, 2).number_format = formato
+        par.cell(par.max_row, 2).fill = entrada
+    par.column_dimensions["A"].width = 52
+    par.column_dimensions["B"].width = 16
+    P_IRPJ, P_ADIC, P_ISENTO, P_LIMITE = ("'Parâmetros'!$B$2", "'Parâmetros'!$B$3",
+                                         "'Parâmetros'!$B$4", "'Parâmetros'!$B$5")
+
+    # ---- Adições e exclusões (a Parte A soma daqui com SOMASES)
     lanc = wb.create_sheet("Adições e exclusões")
     cabecalho(lanc)
     lanc.append(["Período", "Tipo", "Descrição", "Tributo", "Valor (R$)"])
@@ -544,11 +551,144 @@ def _excel(empresa, ano, periodos):
         c.font, c.fill = negrito, fundo
     for p, d in periodos:
         for l in d.apuracao.lancamentos:
-            lanc.append([rotulo_periodo(p), LalurLancamento.TIPOS[l.tipo], l.descricao,
+            lanc.append([rotulo_periodo(p, curto=True), LalurLancamento.TIPOS[l.tipo], l.descricao,
                          LalurLancamento.TRIBUTOS[l.tributo], l.valor])
             lanc.cell(lanc.max_row, 5).number_format = numero
-    for letra, w in zip("ABCDE", [14, 10, 50, 14, 16]):
+    for letra, w in zip("ABCDE", [12, 10, 50, 14, 16]):
         lanc.column_dimensions[letra].width = w
+    L = "'Adições e exclusões'!"
+
+    # ---- Parte A com fórmulas
+    cabecalho(ws)
+    n = len(periodos)
+    col_formula = n + 2
+    ws.append(["R$"] + [rotulo_periodo(p, curto=True) for p, _ in periodos] + ["Fórmula / critério"])
+    for c in ws[ws.max_row]:
+        c.font, c.fill = negrito, fundo
+        c.alignment = Alignment(horizontal="center")
+    linha_titulo = ws.max_row
+    linhas = {}  # chave -> nº da linha
+
+    def secao_(titulo):
+        ws.append([titulo])
+        for c in ws[ws.max_row][:col_formula]:
+            c.fill, c.font = secao, negrito
+
+    def linha(chave, rotulo, celulas, explicacao, estilo="", formato=numero, digitavel=False):
+        """celulas: função (índice do período, letra da coluna) -> valor ou fórmula."""
+        ws.append([rotulo])
+        r = ws.max_row
+        linhas[chave] = r
+        for i in range(n):
+            letra = get_column_letter(i + 2)
+            c = ws.cell(r, i + 2, celulas(i, letra))
+            c.number_format = formato
+            if digitavel:
+                c.fill = entrada
+            if estilo:
+                c.font = negrito
+        if estilo:
+            ws.cell(r, 1).font = negrito
+        ws.cell(r, col_formula, explicacao).font = cinza
+
+    def ref(chave, letra):
+        return f"{letra}{linhas[chave]}"
+
+    def somases(letra, tipo, excluir):
+        rot = f"{letra}${linha_titulo}"
+        return (f'=SUMIFS({L}$E:$E,{L}$A:$A,{rot},{L}$B:$B,"{tipo}",{L}$D:$D,"<>{excluir}")')
+
+    ap = [d.apuracao for _, d in periodos]
+    secao_("Dados do período")
+    linha("lucro", "Lucro líquido antes do IRPJ/CSLL", lambda i, c: ap[i].lucro_antes,
+          "Informado (resultado contábil do período)", digitavel=True)
+    linha("meses", "Meses do período", lambda i, c: 12 if periodos[i][0] == 0 else 3,
+          "3 no trimestre, 12 na apuração anual", formato="0", digitavel=True)
+    linha("comp", "Compensar prejuízos (1 = sim, 0 = não)", lambda i, c: 1 if ap[i].compensar else 0,
+          "Informado", formato="0", digitavel=True)
+    linha("aliq", "Alíquota da CSLL (%)", lambda i, c: ap[i].aliquota_csll, "Informado", digitavel=True)
+
+    secao_("IRPJ")
+    linha("i_ad", "(+) Adições", lambda i, c: somases(c, "Adição", "Só CSLL"),
+          "Soma das adições do período (IRPJ e CSLL + Só IRPJ) na aba Adições e exclusões")
+    linha("i_ex", "(−) Exclusões", lambda i, c: somases(c, "Exclusão", "Só CSLL"),
+          "Soma das exclusões do período (IRPJ e CSLL + Só IRPJ)")
+    linha("i_aj", "= Lucro ajustado", lambda i, c: f"={ref('lucro', c)}+{ref('i_ad', c)}-{ref('i_ex', c)}",
+          "Lucro antes + Adições − Exclusões", "subtotal")
+    linha("i_sa", "Prejuízo fiscal a compensar (saldo anterior)",
+          lambda i, c: periodos[0][1].irpj.saldo_anterior if i == 0 else f"={get_column_letter(i + 1)}{{i_sf}}",
+          "1º período: saldo da Parte B; demais: saldo final do período anterior")
+    linha("i_co", "(−) Compensação de prejuízo fiscal",
+          lambda i, c: f"=IF(AND({ref('comp', c)}=1,{ref('i_aj', c)}>0),"
+                       f"MIN({ref('i_sa', c)},ROUND({ref('i_aj', c)}*{P_LIMITE},2)),0)",
+          "Menor entre o saldo e 30% do lucro ajustado (se lucro ajustado positivo)")
+    linha("i_lr", "= Lucro real", lambda i, c: f"=MAX({ref('i_aj', c)}-{ref('i_co', c)},0)",
+          "Lucro ajustado − Compensação (zero se negativo)", "subtotal")
+    linha("i_15", "IRPJ 15%", lambda i, c: f"=ROUND({ref('i_lr', c)}*{P_IRPJ},2)", "Lucro real × 15%")
+    linha("i_10", "Adicional 10%",
+          lambda i, c: f"=ROUND(MAX({ref('i_lr', c)}-{P_ISENTO}*{ref('meses', c)},0)*{P_ADIC},2)",
+          "(Lucro real − R$ 20.000,00 × meses) × 10%, se positivo")
+    linha("i_dv", "IRPJ devido", lambda i, c: f"={ref('i_15', c)}+{ref('i_10', c)}", "IRPJ 15% + Adicional",
+          "subtotal")
+    linha("i_de", "(−) Deduções (retenções/antecipações)", lambda i, c: ap[i].irpj_deduzir, "Informado",
+          digitavel=True)
+    linha("i_pg", "IRPJ a pagar", lambda i, c: f"=MAX({ref('i_dv', c)}-{ref('i_de', c)},0)",
+          "IRPJ devido − Deduções (zero se negativo)", "total")
+    linha("i_ge", "Prejuízo fiscal gerado no período", lambda i, c: f"=MAX(-{ref('i_aj', c)},0)",
+          "Lucro ajustado negativo vira prejuízo a compensar")
+    linha("i_sf", "Prejuízo fiscal a compensar (saldo final)",
+          lambda i, c: f"={ref('i_sa', c)}-{ref('i_co', c)}+{ref('i_ge', c)}",
+          "Saldo anterior − Compensação + Prejuízo gerado", "subtotal")
+
+    secao_("CSLL")
+    linha("c_ad", "(+) Adições", lambda i, c: somases(c, "Adição", "Só IRPJ"),
+          "Soma das adições do período (IRPJ e CSLL + Só CSLL)")
+    linha("c_ex", "(−) Exclusões", lambda i, c: somases(c, "Exclusão", "Só IRPJ"),
+          "Soma das exclusões do período (IRPJ e CSLL + Só CSLL)")
+    linha("c_aj", "= Base ajustada", lambda i, c: f"={ref('lucro', c)}+{ref('c_ad', c)}-{ref('c_ex', c)}",
+          "Lucro antes + Adições − Exclusões", "subtotal")
+    linha("c_sa", "Base negativa a compensar (saldo anterior)",
+          lambda i, c: periodos[0][1].csll.saldo_anterior if i == 0 else f"={get_column_letter(i + 1)}{{c_sf}}",
+          "1º período: saldo da Parte B; demais: saldo final do período anterior")
+    linha("c_co", "(−) Compensação de base negativa",
+          lambda i, c: f"=IF(AND({ref('comp', c)}=1,{ref('c_aj', c)}>0),"
+                       f"MIN({ref('c_sa', c)},ROUND({ref('c_aj', c)}*{P_LIMITE},2)),0)",
+          "Menor entre o saldo e 30% da base ajustada (se positiva)")
+    linha("c_bc", "= Base de cálculo", lambda i, c: f"=MAX({ref('c_aj', c)}-{ref('c_co', c)},0)",
+          "Base ajustada − Compensação (zero se negativa)", "subtotal")
+    linha("c_dv", "CSLL devida", lambda i, c: f"=ROUND({ref('c_bc', c)}*{ref('aliq', c)}/100,2)",
+          "Base de cálculo × alíquota da CSLL", "subtotal")
+    linha("c_de", "(−) Deduções (retenções/antecipações)", lambda i, c: ap[i].csll_deduzir, "Informado",
+          digitavel=True)
+    linha("c_pg", "CSLL a pagar", lambda i, c: f"=MAX({ref('c_dv', c)}-{ref('c_de', c)},0)",
+          "CSLL devida − Deduções (zero se negativo)", "total")
+    linha("c_ge", "Base negativa gerada no período", lambda i, c: f"=MAX(-{ref('c_aj', c)},0)",
+          "Base ajustada negativa vira base negativa a compensar")
+    linha("c_sf", "Base negativa a compensar (saldo final)",
+          lambda i, c: f"={ref('c_sa', c)}-{ref('c_co', c)}+{ref('c_ge', c)}",
+          "Saldo anterior − Compensação + Base negativa gerada", "subtotal")
+
+    secao_("Resultado do período")
+    linha("ll", "= Lucro líquido do período",
+          lambda i, c: f"={ref('lucro', c)}-{ref('i_dv', c)}-{ref('c_dv', c)}",
+          "Lucro antes − IRPJ devido − CSLL devida", "total")
+
+    # saldos anteriores dos períodos seguintes apontam para o saldo final da coluna anterior
+    for r in (linhas["i_sa"], linhas["c_sa"]):
+        for i in range(1, n + 1):
+            c = ws.cell(r, i + 1)
+            if isinstance(c.value, str):
+                c.value = c.value.replace("{i_sf}", str(linhas["i_sf"])).replace("{c_sf}", str(linhas["c_sf"]))
+
+    ws.column_dimensions["A"].width = 46
+    for i in range(n):
+        ws.column_dimensions[get_column_letter(i + 2)].width = 16
+    ws.column_dimensions[get_column_letter(col_formula)].width = 70
+    ws.freeze_panes = ws.cell(linha_titulo + 1, 2)
+    ws.cell(ws.max_row + 2, 1, "Células em amarelo são dados informados; as demais são fórmulas.").font = cinza
+
+    wb.move_sheet("Parâmetros", offset=1)
+    wb.calculation = CalcProperties(fullCalcOnLoad=True)
     saida = BytesIO()
     wb.save(saida)
     return saida.getvalue()
