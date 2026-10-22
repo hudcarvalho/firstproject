@@ -72,6 +72,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   quotas de no mínimo R$ 1.000,00; 2ª com juros de 1%, 3ª com Selic + 1%), com vencimentos e códigos
   de receita (editáveis), e gera um PDF com os dados de cada campo do DARF. O DARF com código de barras
   é numerado pela Receita Federal: emita-o no Sicalc Web ou na DCTFWeb com esses dados.
+- **Lucro por grupo econômico** (*Contábil → Lucro por grupo econômico*, ou o atalho na lista de
+  clientes ao filtrar um grupo): para o grupo e o ano escolhidos, lista as empresas ativas com o lucro
+  antes do IRPJ/CSLL informado no LALUR em cada trimestre (1º a 4º TRI), total por empresa e total do
+  grupo; exporta em **Excel** (com fórmulas de soma) e **PDF**.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

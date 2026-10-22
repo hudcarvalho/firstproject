@@ -771,3 +771,201 @@ def guia(id, ano, periodo):
         avisos=avisos, anual=anual, apuracao=guia_darf.fim_do_periodo(ano, periodo),
         sicalc=guia_darf.SICALC,
     )
+
+
+# ---------------------------------------------------------------- lucro do grupo econômico
+
+def _lucro_do_grupo(grupo, ano):
+    """Empresas ativas do grupo e o lucro antes do IRPJ/CSLL informado no LALUR por período.
+
+    Devolve (empresas, colunas, valores) com colunas = [1, 2, 3, 4] (+ 0 se houver apuração
+    anual no ano) e valores[(empresa_id, periodo)] = Decimal.
+    """
+    def chave(e):
+        c = e.codigo or ""
+        return (0, int(c), "") if c.isdigit() else (1, 0, c or e.razao_social)
+
+    empresas = sorted((e for e in grupo.empresas if e.ativo), key=chave)
+    ids = [e.id for e in empresas]
+    valores = {}
+    if ids:
+        for a in LalurApuracao.query.filter(LalurApuracao.empresa_id.in_(ids), LalurApuracao.ano == ano,
+                                            LalurApuracao.lucro_antes.isnot(None)):
+            valores[(a.empresa_id, a.periodo)] = a.lucro_antes
+    colunas = [1, 2, 3, 4] + ([0] if any(p == 0 for _, p in valores) else [])
+    return empresas, colunas, valores
+
+
+def _rotulo_coluna_grupo(p):
+    return "ANUAL" if p == 0 else f"{p}º TRI"
+
+
+def _excel_grupo(grupo, ano, empresas, colunas, valores):
+    from io import BytesIO
+
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Border, Font, PatternFill, Side
+    from openpyxl.utils import get_column_letter
+    from openpyxl.workbook.properties import CalcProperties
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Grupo {grupo.nome}"[:31]
+    numero = "#,##0.00;-#,##0.00"
+    ws.append([f"Lucro antes do IRPJ/CSLL — grupo econômico {grupo.nome} — {ano}"])
+    ws["A1"].font = Font(bold=True, size=12)
+    ws.append([])
+    cab = ["CODIGO", "RAZÃO SOCIAL", "CNPJ", "GRUPO"] + [_rotulo_coluna_grupo(p) for p in colunas] + ["TOTAL"]
+    ws.append(cab)
+    fino = Side(style="thin", color="999999")
+    borda = Border(top=fino, bottom=fino, left=fino, right=fino)
+    for c in ws[3]:
+        c.font = Font(bold=True, color="FFFFFF")
+        c.fill = PatternFill("solid", fgColor="8B1E2D")
+        c.alignment = Alignment(horizontal="center")
+        c.border = borda
+    primeira = 4
+    col_valor1 = 5
+    col_total = col_valor1 + len(colunas)
+    for e in empresas:
+        codigo = e.codigo or ""
+        ws.append([int(codigo) if codigo.isdigit() else codigo, e.razao_social, e.cnpj_formatado, grupo.nome]
+                  + [valores.get((e.id, p)) for p in colunas])
+        r = ws.max_row
+        ini, fim = get_column_letter(col_valor1), get_column_letter(col_total - 1)
+        ws.cell(r, col_total, f"=SUM({ini}{r}:{fim}{r})")
+        for c in ws[r]:
+            c.border = borda
+        for i in range(col_valor1, col_total + 1):
+            ws.cell(r, i).number_format = numero
+            if i < col_total:
+                ws.cell(r, i).fill = PatternFill("solid", fgColor="DDEBF7")
+    ultima = ws.max_row
+    ws.append(["", "TOTAL DO GRUPO"])
+    r = ws.max_row
+    for i in range(col_valor1, col_total + 1):
+        letra = get_column_letter(i)
+        ws.cell(r, i, f"=SUM({letra}{primeira}:{letra}{ultima})" if empresas else 0).number_format = numero
+    for c in ws[r]:
+        c.font = Font(bold=True)
+        c.border = borda
+    ws.append([])
+    ws.append(["Valores: lucro líquido antes do IRPJ e da CSLL informado no LALUR de cada período; "
+               "em branco = período não apurado."])
+    ws.cell(ws.max_row, 1).font = Font(italic=True, color="666666")
+    for letra, w in zip("ABCD", [10, 52, 20, 14]):
+        ws.column_dimensions[letra].width = w
+    for i in range(col_valor1, col_total + 1):
+        ws.column_dimensions[get_column_letter(i)].width = 16
+    ws.freeze_panes = "C4"
+    wb.calculation = CalcProperties(fullCalcOnLoad=True)
+    saida = BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
+
+
+def _pdf_grupo(grupo, ano, empresas, colunas, valores):
+    from .competencia import fmt_valor
+    from .pdf_simples import A4, Documento
+
+    doc = Documento(f"Lucro do grupo {grupo.nome} {ano}", tamanho=(A4[1], A4[0]))  # paisagem
+    m = 30
+    larg = doc.largura_pagina - 2 * m
+    fixas = [46, 0, 104, 60]
+    valor_w = 78
+    n_val = len(colunas) + 1
+    fixas[1] = larg - sum(fixas) - valor_w * n_val
+    larguras = fixas + [valor_w] * n_val
+    cab = ["CÓDIGO", "RAZÃO SOCIAL", "CNPJ", "GRUPO"] + [_rotulo_coluna_grupo(p) for p in colunas] + ["TOTAL"]
+    alt = 16
+    pagina = [0]
+
+    def topo():
+        pagina[0] += 1
+        doc.texto(m, 34, f"Lucro antes do IRPJ/CSLL — grupo econômico {grupo.nome}", 13, negrito=True)
+        doc.texto(m + larg, 34, f"Exercício {ano}", 11, negrito=True, alinhar="direita")
+        doc.texto(m, 48, "Lucro líquido antes do IRPJ e da CSLL informado no LALUR de cada período "
+                         "(em branco = não apurado).", 8.5, cinza=0.35)
+        doc.texto(m, doc.altura_pagina - 18, f"Emitido em {date.today():%d/%m/%Y} pelo Controle de Rotina",
+                  7.5, cinza=0.45)
+        doc.texto(m + larg, doc.altura_pagina - 18, f"Página {pagina[0]}", 7.5, alinhar="direita", cinza=0.45)
+        y = 60
+        doc.faixa(m, y, larg, alt, 0.25)
+        x = m
+        for i, (c, w) in enumerate(zip(cab, larguras)):
+            if i < 4:
+                doc.texto(x + 4, y + 11, c, 8, negrito=True, cinza=1)
+            else:
+                doc.texto(x + w - 4, y + 11, c, 8, negrito=True, cinza=1, alinhar="direita")
+            x += w
+        return y + alt
+
+    def linha(y, celulas, negrito=False, destaque=False):
+        if destaque:
+            doc.faixa(m, y, larg, alt, 0.92)
+        x = m
+        for i, (c, w) in enumerate(zip(celulas, larguras)):
+            if i < 4:
+                texto = c
+                while texto and largura_texto(texto, 8.5, negrito) > w - 8:
+                    texto = texto[:-2] + "…"
+                doc.texto(x + 4, y + 11.5, texto, 8.5, negrito=negrito)
+            else:
+                if i - 4 < len(colunas) and not negrito:
+                    doc.faixa(x, y, w, alt, 0.93)
+                doc.texto(x + w - 4, y + 11.5, c, 8.5, negrito=negrito, alinhar="direita")
+            x += w
+        doc.linha(m, y + alt, m + larg, y + alt, 0.3, 0.75)
+        return y + alt
+
+    from .pdf_simples import largura as largura_texto
+
+    y = topo()
+    totais = [Decimal("0")] * n_val
+    for e in empresas:
+        if y + alt > doc.altura_pagina - 30:
+            doc.nova_pagina()
+            y = topo()
+        vals = [valores.get((e.id, p)) for p in colunas]
+        total = sum((v for v in vals if v is not None), Decimal("0"))
+        for i, v in enumerate(vals + [total]):
+            totais[i] += v or 0
+        y = linha(y, [e.codigo or "", e.razao_social, e.cnpj_formatado, grupo.nome]
+                  + [fmt_valor(v) for v in vals] + [fmt_valor(total)])
+    if y + alt > doc.altura_pagina - 30:
+        doc.nova_pagina()
+        y = topo()
+    linha(y, ["", "TOTAL DO GRUPO", "", ""] + [fmt_valor(t) for t in totais], negrito=True, destaque=True)
+    return doc.gerar()
+
+
+@bp.route("/grupo")
+def grupo():
+    """Escolha do grupo econômico e do ano; prévia e exportação em Excel/PDF."""
+    from flask import Response
+
+    from .models import GrupoEconomico
+
+    grupos = GrupoEconomico.query.order_by(GrupoEconomico.nome).all()
+    escolhido = db.session.get(GrupoEconomico, request.args.get("grupo", type=int) or 0)
+    ano = _ano()
+    empresas, colunas, valores = _lucro_do_grupo(escolhido, ano) if escolhido else ([], [1, 2, 3, 4], {})
+    formato = request.args.get("formato")
+    if escolhido and formato in ("xlsx", "pdf"):
+        if formato == "xlsx":
+            conteudo = _excel_grupo(escolhido, ano, empresas, colunas, valores)
+            tipo = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            conteudo = _pdf_grupo(escolhido, ano, empresas, colunas, valores)
+            tipo = "application/pdf"
+        nome_grupo = "".join(ch if ch.isalnum() else "_" for ch in escolhido.nome)[:30]
+        return Response(conteudo, mimetype=tipo, headers={
+            "Content-Disposition": f'attachment; filename="lucro_grupo_{nome_grupo}_{ano}.{formato}"'})
+    linhas = []
+    for e in empresas:
+        vals = [valores.get((e.id, p)) for p in colunas]
+        linhas.append((e, vals, sum((v for v in vals if v is not None), Decimal("0"))))
+    totais = [sum((l[1][i] or 0 for l in linhas), Decimal("0")) for i in range(len(colunas))]
+    return render_template("lalur/grupo.html", grupos=grupos, escolhido=escolhido, ano=ano,
+                           colunas=[(p, _rotulo_coluna_grupo(p)) for p in colunas], linhas=linhas,
+                           totais=totais, total_geral=sum(totais, Decimal("0")))
