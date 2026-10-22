@@ -21,7 +21,7 @@
       <button class="btn btn-outline-danger" name="formato" value="pdf" {{ 'disabled' if not escolhido }}>PDF</button>
     </div>
   </div>
-  <div class="form-text mt-2">Lucro líquido antes do IRPJ e da CSLL informado no LALUR de cada empresa do grupo, por trimestre
+  <div class="form-text mt-2">Só empresas do Lucro Real (inclusive Lucro Real Trimestral). Lucro líquido antes do IRPJ e da CSLL informado no LALUR de cada empresa do grupo, por trimestre
     (em branco = período não apurado).</div>
 </form>
 
@@ -39,7 +39,7 @@
         {% for v in vals %}<td class="text-end text-nowrap">{{ v | valor if v is not none else '' }}</td>{% endfor %}
         <td class="text-end text-nowrap fw-semibold">{{ total | valor }}</td></tr>
     {% else %}
-      <tr><td colspan="{{ 5 + colunas|length }}" class="text-muted text-center py-3">Nenhuma empresa ativa neste grupo.</td></tr>
+      <tr><td colspan="{{ 5 + colunas|length }}" class="text-muted text-center py-3">Nenhuma empresa ativa do Lucro Real neste grupo.</td></tr>
     {% endfor %}
     </tbody>
     {% if linhas %}

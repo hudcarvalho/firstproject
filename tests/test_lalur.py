@@ -184,11 +184,15 @@ def test_lucro_por_grupo_economico(client, app):
 
     with app.app_context():
         lr = RegimeTributario.query.filter_by(nome="Lucro Real").one()
+        lp = RegimeTributario.query.filter_by(nome="Lucro Presumido").one()
         g = GrupoEconomico(nome="TBB")
         a = Empresa(codigo="2083", razao_social="VILLABOWLING LTDA", cnpj="11222333000181", regime=lr, grupo=g)
         b = Empresa(codigo="2082", razao_social="STRIKER LTDA", cnpj="45997418000153", regime=lr, grupo=g)
         c = Empresa(codigo="2285", razao_social="CWC LTDA", cnpj="60700309000116", regime=lr, grupo=g)
-        db.session.add_all([g, a, b, c])
+        lrt = RegimeTributario(nome="Lucro Real Trimestral")
+        t = Empresa(codigo="2300", razao_social="TRIMESTRAL LTDA", cnpj="34028316000103", regime=lrt, grupo=g)
+        p = Empresa(codigo="1", razao_social="PRESUMIDA FORA LTDA", cnpj="33000167000101", regime=lp, grupo=g)
+        db.session.add_all([g, a, b, c, lrt, t, p])
         db.session.commit()
         gid, ida, idb = g.id, a.id, b.id
     client.post(f"/lalur/{ida}/2026/1", data={"lucro_antes": "10.978,12"})
@@ -198,16 +202,18 @@ def test_lucro_por_grupo_economico(client, app):
     tela = client.get(f"/lalur/grupo?grupo={gid}&ano=2026").get_data(as_text=True)
     assert "10.978,12" in tela and "70.455,22" in tela and "121.433,53" in tela  # total do grupo
     assert "Lucro por grupo econômico" in client.get("/empresas").get_data(as_text=True)
+    assert "TRIMESTRAL LTDA" in tela and "PRESUMIDA FORA" not in tela
 
     r = client.get(f"/lalur/grupo?grupo={gid}&ano=2026&formato=xlsx")
     assert "lucro_grupo_TBB_2026.xlsx" in r.headers["Content-Disposition"]
     ws = load_workbook(BytesIO(r.data)).active
     linhas = list(ws.iter_rows(values_only=True))
     assert linhas[2] == ("CODIGO", "RAZÃO SOCIAL", "CNPJ", "GRUPO", "1º TRI", "2º TRI", "3º TRI", "4º TRI", "TOTAL")
-    assert [l[0] for l in linhas[3:6]] == [2082, 2083, 2285]  # ordem pelo código
+    # só Lucro Real e Lucro Real Trimestral, em ordem de código (a do Presumido fica de fora)
+    assert [l[0] for l in linhas[3:7]] == [2082, 2083, 2285, 2300]
     assert linhas[4][4:6] == (10978.12, 40000.19) and linhas[4][8] == "=SUM(E5:H5)"
     assert linhas[5][4:8] == (None, None, None, None)  # sem apuração: em branco
-    assert linhas[6][1] == "TOTAL DO GRUPO" and linhas[6][4] == "=SUM(E4:E6)"
+    assert linhas[7][1] == "TOTAL DO GRUPO" and linhas[7][4] == "=SUM(E4:E7)"
 
     r = client.get(f"/lalur/grupo?grupo={gid}&ano=2026&formato=pdf")
     assert r.mimetype == "application/pdf" and b"70.455,22" in r.data and b"121.433,53" in r.data

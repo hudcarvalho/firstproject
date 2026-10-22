@@ -776,7 +776,8 @@ def guia(id, ano, periodo):
 # ---------------------------------------------------------------- lucro do grupo econômico
 
 def _lucro_do_grupo(grupo, ano):
-    """Empresas ativas do grupo e o lucro antes do IRPJ/CSLL informado no LALUR por período.
+    """Empresas ativas do Lucro Real (inclui Lucro Real Trimestral) do grupo e o lucro antes do
+    IRPJ/CSLL informado no LALUR por período.
 
     Devolve (empresas, colunas, valores) com colunas = [1, 2, 3, 4] (+ 0 se houver apuração
     anual no ano) e valores[(empresa_id, periodo)] = Decimal.
@@ -785,7 +786,7 @@ def _lucro_do_grupo(grupo, ano):
         c = e.codigo or ""
         return (0, int(c), "") if c.isdigit() else (1, 0, c or e.razao_social)
 
-    empresas = sorted((e for e in grupo.empresas if e.ativo), key=chave)
+    empresas = sorted((e for e in grupo.empresas if e.ativo and e.lucro_real), key=chave)
     ids = [e.id for e in empresas]
     valores = {}
     if ids:
