@@ -17,6 +17,7 @@
     </select></label>
   <span class="text-muted" id="busca-contador"></span>
   <a href="#" id="limpar-filtros" class="d-none">Limpar filtros</a>
+  <a href="{{ url_for('lalur.grupo') }}" id="lucro-grupo" class="d-none ms-auto">Lucro do grupo (Excel/PDF) →</a>
 </div>
 
 <div class="card"><div class="table-responsive planilha">
@@ -168,6 +169,9 @@
     const algumFiltro = filtros.some(f => f.value.trim() !== '');
     contador.textContent = algumFiltro ? plural(visiveis) + ' de ' + linhas.length : plural(visiveis) + ' ativos';
     limpar.classList.toggle('d-none', !algumFiltro);
+    const grupo = document.getElementById('f-grupo').value, atalho = document.getElementById('lucro-grupo');
+    atalho.classList.toggle('d-none', !grupo || grupo === '0');
+    if (grupo && grupo !== '0') atalho.href = atalho.href.split('?')[0] + '?grupo=' + grupo;
     filtros.forEach(f => f.classList.toggle('filtro-ativo', f.value.trim() !== ''));
 
     // guarda os filtros no endereço, para continuarem ao voltar à página

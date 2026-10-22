@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Lucro por grupo econômico{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Lucro por grupo econômico</h1>
+<form method="get" class="card card-body mb-4" id="form-grupo">
+  <div class="row g-3 align-items-end">
+    <div class="col-md-5">
+      <label class="form-label" for="grupo">Grupo econômico</label>
+      <select class="form-select" name="grupo" id="grupo">
+        <option value="">— escolha —</option>
+        {% for g in grupos %}<option value="{{ g.id }}" {{ 'selected' if escolhido and escolhido.id == g.id }}>{{ g.nome }}</option>{% endfor %}
+      </select>
+    </div>
+    <div class="col-md-2">
+      <label class="form-label" for="ano">Ano</label>
+      <input class="form-control" type="number" name="ano" id="ano" value="{{ ano }}" min="2000" max="2100">
+    </div>
+    <div class="col-md-5 d-flex gap-2">
+      <button class="btn btn-outline-secondary">Atualizar</button>
+      <button class="btn btn-outline-success" name="formato" value="xlsx" {{ 'disabled' if not escolhido }}>Excel</button>
+      <button class="btn btn-outline-danger" name="formato" value="pdf" {{ 'disabled' if not escolhido }}>PDF</button>
+    </div>
+  </div>
+  <div class="form-text mt-2">Lucro líquido antes do IRPJ e da CSLL informado no LALUR de cada empresa do grupo, por trimestre
+    (em branco = período não apurado).</div>
+</form>
+
+{% if escolhido %}
+<div class="card">
+  <div class="table-responsive">
+  <table class="table table-sm align-middle mb-0">
+    <thead class="table-light"><tr><th>Código</th><th>Razão social</th><th>CNPJ</th><th>Grupo</th>
+      {% for p, rot in colunas %}<th class="text-end">{{ rot }}</th>{% endfor %}<th class="text-end">Total</th></tr></thead>
+    <tbody>
+    {% for e, vals, total in linhas %}
+      <tr><td>{{ e.codigo or '' }}</td>
+        <td>{% if e.lucro_real %}<a href="{{ url_for('lalur.empresa', id=e.id, ano=ano) }}">{{ e.razao_social }}</a>{% else %}{{ e.razao_social }}{% endif %}</td>
+        <td class="text-nowrap">{{ e.cnpj_formatado }}</td><td>{{ escolhido.nome }}</td>
+        {% for v in vals %}<td class="text-end text-nowrap">{{ v | valor if v is not none else '' }}</td>{% endfor %}
+        <td class="text-end text-nowrap fw-semibold">{{ total | valor }}</td></tr>
+    {% else %}
+      <tr><td colspan="{{ 5 + colunas|length }}" class="text-muted text-center py-3">Nenhuma empresa ativa neste grupo.</td></tr>
+    {% endfor %}
+    </tbody>
+    {% if linhas %}
+    <tfoot class="table-light fw-bold"><tr><td></td><td>Total do grupo</td><td></td><td></td>
+      {% for t in totais %}<td class="text-end text-nowrap">{{ t | valor }}</td>{% endfor %}
+      <td class="text-end text-nowrap">{{ total_geral | valor }}</td></tr></tfoot>
+    {% endif %}
+  </table>
+  </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('grupo').addEventListener('change', e => e.target.form.submit());
+</script>
+{% endblock %}
