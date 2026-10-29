@@ -17,7 +17,8 @@ def test_todo_formulario_post_tem_csrf(client, app):
     paginas = ["/contabil/", "/empresas", "/empresas/nova", f"/empresas/{eid}/editar",
                f"/empresas/{eid}/contabil", "/contabil/obrigacoes/nova", "/contabil/matriz",
                "/regimes/novo", "/responsaveis/novo", "/modulos/1/editar", "/usuarios/novo",
-               "/minha-senha", "/importar", "/distribuicao/", f"/distribuicao/{eid}"]
+               "/minha-senha", "/importar", "/distribuicao/", f"/distribuicao/{eid}",
+               "/ferramentas/pdf-excel"]
     for url in paginas:
         html = client.get(url).get_data(as_text=True)
         for form in re.findall(r"<form\b[^>]*>.*?</form>", html, flags=re.S | re.I):
