@@ -77,6 +77,11 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   (inclusive Lucro Real Trimestral) com o lucro
   antes do IRPJ/CSLL informado no LALUR em cada trimestre (1º a 4º TRI), total por empresa e total do
   grupo; exporta em **Excel** (com fórmulas de soma) e **PDF**.
+- **Converter PDF em Excel** (*Ferramentas → Converter PDF em Excel*): envia um PDF (até 10 MB e
+  150 páginas) e baixa a planilha .xlsx. Modo "Layout da página" (todo o texto, colunas pelo
+  alinhamento — balancetes, razões, demonstrativos) ou "Somente tabelas com linhas/bordas"; valores
+  1.234,56 / (1.234,56) / 1.234,56- viram números; opção de uma aba por página. O arquivo não fica
+  guardado. Só PDFs com texto (escaneados precisam de OCR antes). Usa a biblioteca `pdfplumber`.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

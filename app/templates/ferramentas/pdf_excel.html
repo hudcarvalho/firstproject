@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Converter PDF em Excel{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Converter PDF em Excel</h1>
+<form method="post" enctype="multipart/form-data" class="card" style="max-width: 760px" id="form-pdf-excel"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="arquivo">Arquivo PDF</label>
+      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf" required>
+      <div class="form-text">Até 10 MB e {{ max_paginas }} páginas. O arquivo é convertido na hora e não fica guardado no sistema.</div>
+    </div>
+    <div class="mb-3">
+      <label class="form-label d-block">Como montar as colunas</label>
+      {% for valor, rotulo in modos.items() %}
+      <div class="form-check">
+        <input class="form-check-input" type="radio" name="modo" id="modo-{{ valor }}" value="{{ valor }}" {{ 'checked' if loop.first }}>
+        <label class="form-check-label" for="modo-{{ valor }}">{{ rotulo }}</label>
+      </div>
+      {% endfor %}
+      <div class="form-text">“Layout da página” traz todo o texto e forma as colunas pelo alinhamento (bom para balancetes,
+        razões e demonstrativos). “Somente tabelas” pega só as tabelas desenhadas com bordas.</div>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="numeros" id="numeros" checked>
+      <label class="form-check-label" for="numeros">Transformar valores (1.234,56 · -1.234,56 · (1.234,56)) em números</label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="aba_por_pagina" id="aba_por_pagina">
+      <label class="form-check-label" for="aba_por_pagina">Uma aba por página (senão, tudo em uma aba)</label>
+    </div>
+  </div>
+  <div class="card-footer d-flex align-items-center gap-3">
+    <button class="btn btn-success" id="botao-converter">Converter e baixar Excel</button>
+    <span class="small text-muted d-none" id="convertendo">Convertendo… arquivos grandes podem levar alguns segundos.</span>
+  </div>
+</form>
+<p class="small text-muted mt-3" style="max-width: 760px">Funciona com PDFs que têm texto (gerados por sistemas). PDF escaneado
+  (imagem/foto do papel) não tem texto para ler e precisaria passar por OCR antes.</p>
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('form-pdf-excel').addEventListener('submit', () => {
+  document.getElementById('convertendo').classList.remove('d-none');
+  setTimeout(() => document.getElementById('convertendo').classList.add('d-none'), 15000);
+});
+</script>
+{% endblock %}

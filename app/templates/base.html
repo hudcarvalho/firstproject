@@ -37,6 +37,12 @@
         </li>
         {% endfor %}
         <li class="nav-item"><a class="nav-link {{ 'active' if (ep.startswith('main.empresa') and not mod_atual) or (ep.startswith('lalur.') and ep != 'lalur.grupo') or (ep.startswith('distribuicao.') and ep != 'distribuicao.exportar') }}" href="{{ url_for('main.empresas_lista') }}">Clientes</a></li>
+        <li class="nav-item dropdown">
+          <a class="nav-link dropdown-toggle {{ 'active' if ep.startswith('ferramentas.') }}" href="#" data-bs-toggle="dropdown">Ferramentas</a>
+          <ul class="dropdown-menu">
+            <li><a class="dropdown-item" href="{{ url_for('ferramentas.pdf_excel') }}">Converter PDF em Excel</a></li>
+          </ul>
+        </li>
         {% if current_user.admin %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep or 'importar' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
