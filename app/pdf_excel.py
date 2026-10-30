@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 MAX_PAGINAS = 150
-MODOS = {"auto": "Automático (reconhece o extrato mensal do Itaú; nos demais, layout da página)",
+MODOS = {"auto": "Automático (reconhece extratos do Itaú e do Bradesco; nos demais, layout da página)",
          "layout": "Layout da página (relatórios, com ou sem bordas)",
          "tabelas": "Somente tabelas com linhas/bordas"}
 
@@ -170,18 +170,23 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
         raise ErroPDF(f"O PDF tem {total} páginas; o limite é {MAX_PAGINAS}. Divida o arquivo e converta por partes.")
 
     if modo == "auto":
-        from . import extrato_itau
-        try:
-            reconhecido = extrato_itau.e_extrato_itau(pdf)
-        except Exception:
-            reconhecido = False
-        if reconhecido:
+        from . import extrato_bradesco, extrato_itau
+        from .extrato_planilha import planilha
+        leitor = None
+        for banco in (extrato_itau, extrato_bradesco):
             try:
-                ex = extrato_itau.ler(pdf)
+                if (extrato_itau.e_extrato_itau if banco is extrato_itau else extrato_bradesco.e_extrato_bradesco)(pdf):
+                    leitor = banco.ler
+                    break
+            except Exception:
+                pass
+        if leitor:
+            try:
+                ex = leitor(pdf)
             finally:
                 pdf.close()
             if ex.movimentos:
-                return extrato_itau.planilha(ex), total, len(ex.movimentos)
+                return planilha(ex), total, len(ex.movimentos)
             pdf = pdfplumber.open(BytesIO(conteudo))
             paginas = pdf.pages
     extrair = _linhas_por_tabelas if modo == "tabelas" else _linhas_por_texto

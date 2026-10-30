@@ -87,7 +87,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   *Extrato* (data, histórico, favorecido/remetente, tipo, entrada, saída, saldo por fórmula e, no fim
   de cada dia, o saldo do banco — conta corrente + aplicação automática — com "Confere") e aba
   *Investimentos CDB* (carteira com rendimento e IR/IOF estimado). As movimentações internas da
-  aplicação automática não entram como lançamento.
+  aplicação automática não entram como lançamento. O extrato **Mensal / Por Período do Bradesco**
+  também é reconhecido: mesmas abas, com a coluna Dcto., o complemento (remetente/destinatário) como
+  favorecido, conferência com o saldo impresso em cada linha e abas *Invest Fácil* (saldos diários) e
+  *Últimos lançamentos* (posteriores ao período).
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

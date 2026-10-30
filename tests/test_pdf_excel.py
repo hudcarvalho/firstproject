@@ -153,3 +153,76 @@ def test_extrato_itau_no_modo_layout_fica_simples(client):
     r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_extrato_itau()), "e.pdf"), "modo": "layout"},
                     content_type="multipart/form-data")
     assert load_workbook(BytesIO(r.data)).sheetnames == ["PDF"]
+
+
+def _pdf_extrato_bradesco():
+    """Extrato "Mensal / Por Período" no layout do Bradesco (registros de até 3 linhas), dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(155, 43, "Extrato Mensal / Por Período", 9)
+    t(155, 58, "EMPRESA TESTE LTDA | CNPJ: 011.222.333/0001-81", 8)
+    t(155, 70, "Nome do usuário: FULANO DE TAL", 8)
+    t(547, 100, "Folha 1/1", 8)
+    t(40, 178, "Extrato de: Ag: 1111 | CC: 0001234-5 | Entre 01/08/2026 e 31/08/2026", 8)
+    for x, texto in ((44, "Data"), (104, "Lançamento"), (269, "Dcto."), (338, "Crédito (R$)"),
+                     (428, "Débito (R$)"), (519, "Saldo (R$)")):
+        t(x, 211, texto, 8)
+
+    def linha(y, data="", nome="", doc_="", valor="", saldo="", tam=7):
+        t(41, y, data, tam)
+        t(101, y, nome, tam)
+        t(266, y, doc_, tam)
+        if valor:
+            t(388 if not valor.startswith("-") else 475, y, valor, tam, alinhar="direita")
+        t(563, y, saldo, tam, alinhar="direita")
+
+    y = 230
+    linha(y, "31/07/2026", "SALDO ANTERIOR", saldo="1.000,00")
+    y += 10.3
+    linha(y, "03/08/2026", "RENTAB.INVEST FACILCRED*", "677471", "1,12", "1.001,12")  # registro de uma linha
+    y += 10.3
+    t(101, y, "PIX RECEBIDO", 7)                                                     # nome acima
+    linha(y + 4.4, "", "", "936154", "5.000,00", "6.001,12")
+    t(101, y + 8.8, "REM: CLIENTE BOM LTDA 03/08", 7)                                 # complemento abaixo
+    y += 19.3
+    t(101, y, "PAGTO ELETRON COBRANCA", 7)
+    linha(y + 4.4, "05/08/2026", "", "1252", "-4.389,70", "1.611,42")
+    t(101, y + 8.8, "020039981400303804BRADESCO ADMIN", 7)
+    y += 19.3
+    linha(y, "", "GASTOS CARTAO DE CREDITO", "3990215", "-11,42", "1.600,00")
+    y += 10.3
+    t(41, y, "Total", 7)
+    t(388, y, "5.001,12", 7, alinhar="direita")
+    t(475, y, "-4.401,12", 7, alinhar="direita")
+    t(563, y, "1.600,00", 7, alinhar="direita")
+    t(40, y + 40, "Saldos Invest Fácil / Plus", 9)
+    t(48, y + 60, "Data", 8)
+    t(108, y + 60, "Histórico", 8)
+    t(525, y + 60, "Valor (R$)", 8)
+    t(45, y + 75, "03/08/2026", 7)
+    t(105, y + 75, "SALDO INVEST FÁCIL", 7)
+    t(567, y + 75, "1.001,12", 7, alinhar="direita")
+    return doc.gerar()
+
+
+def test_extrato_bradesco_organizado(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_extrato_bradesco()), "extrato.pdf")},
+                    content_type="multipart/form-data")
+    wb = load_workbook(BytesIO(r.data))
+    assert wb.sheetnames == ["Resumo", "Extrato", "Invest Fácil"]
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "EMPRESA TESTE LTDA — Bradesco ag. 1111 c/c 0001234-5"
+    assert [c.value for c in ext[4]] == ["Data", "Histórico (banco)", "Dcto.", "Favorecido / Complemento", "Tipo",
+                                        "Entrada (R$)", "Saída (R$)", "Saldo (R$)", "Saldo banco (R$)", "Confere"]
+    linhas = [tuple(c.value for c in ext[r][1:9]) for r in range(6, 10)]
+    assert linhas == [
+        ("RENTAB.INVEST FACILCRED*", "677471", None, "Rendimento Invest Fácil", 1.12, None, "=H5+F6-G6", 1001.12),
+        ("PIX RECEBIDO", "936154", "CLIENTE BOM LTDA", "Recebimento PIX/TED", 5000, None, "=H6+F7-G7", 6001.12),
+        ("PAGTO ELETRON COBRANCA", "1252", "BRADESCO ADMIN", "Boletos/contas pagas", None, 4389.7, "=H7+F8-G8", 1611.42),
+        ("GASTOS CARTAO DE CREDITO", "3990215", None, "Cartão de crédito", None, 11.42, "=H8+F9-G9", 1600),
+    ]
+    assert ext["J9"].value == '=IF(ROUND(H9-I9,2)=0,"OK","DIVERGE")'
+    res = wb["Resumo"]
+    assert [res.cell(i, 3).value for i in range(4, 8)] == [1000, 5001.12, 4401.12, 1600]
+    assert res["B5"].value == "=Extrato!F10" and "Extrato!$E$6:$E$9" in res["B13"].value
+    assert [c.value for c in wb["Invest Fácil"][5]][1:] == ["SALDO INVEST FÁCIL", 1001.12]
