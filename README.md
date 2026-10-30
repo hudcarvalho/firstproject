@@ -91,6 +91,11 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   também é reconhecido: mesmas abas, com a coluna Dcto., o complemento (remetente/destinatário) como
   favorecido, conferência com o saldo impresso em cada linha e abas *Invest Fácil* (saldos diários) e
   *Últimos lançamentos* (posteriores ao período).
+  Também são reconhecidos o extrato do **Santander** (app Santander Empresas: lançamentos do mais novo
+  para o mais antigo são postos em ordem cronológica e conferidos linha a linha; saldo anterior calculado
+  a partir do lançamento mais antigo) e o extrato da **Stone** enviado em **planilha** (.xls/.xlsx
+  exportado pela Stone: a tarifa de cada movimentação vira uma linha própria "Tarifa Stone" para o saldo
+  conferir com o "Saldo depois" da Stone).
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o
