@@ -76,3 +76,80 @@ def test_erros(client):
     r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_relatorio()), "a.pdf"), "modo": "tabelas"},
                     content_type="multipart/form-data", follow_redirects=True)
     assert "Nenhum texto encontrado" in r.get_data(as_text=True)
+
+
+def _pdf_extrato_itau():
+    """Extrato mensal no layout do Itaú (posições das colunas iguais às do banco), dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(40, 30, "extrato mensal ag 1234 cc 12345-6 jul 2026 001|002", 8)
+    t(40, 50, "CTC CENTRO", 8)
+    t(40, 62, "EMPRESA FICTICIA LTDA", 8)
+    t(40, 74, "AV PAULISTA 1000", 8)
+    t(411, 110, "saldo em 30/06/26 saldo em 31/07/26", 8)
+    t(58, 122, "01. Conta Corrente e Aplicações Automáticas", 9)
+    t(421, 134, "R$ 1.000,00 R$ 1.500,00", 9)
+    t(343, 150, "entradas (créditos)", 8)
+    t(343, 162, "total 2.000,00", 8)
+    t(343, 174, "saídas (débitos)", 8)
+    t(343, 186, "total 1.500,00", 8)
+    t(56, 210, "Conta Corrente | Movimentação", 9)
+    for x, texto in ((150, "data"), (208, "descrição"), (357, "entradas"), (388, "R$"), (426, "saídas"),
+                     (448, "R$"), (521, "saldo"), (541, "R$")):
+        t(x, 230, texto, 8)
+    linhas = [
+        ("30/06", "Saldo anterior", None, None, "1.000,00"),
+        ("01/07", "Sispag CLIENTE XPTO", "2.000,00", None, None),
+        ("", "BOLETO PAGO FORNECEDOR", None, "500,00-", None),
+        ("", "Apl Aplic Aut Mais", None, "1.499,00-", "1,00"),
+        ("", "SALDO APLIC AUT MAIS", None, None, "2.499,00"),
+        ("02/07", "PIX ENVIADO JOAO SILVA", None, "1.000,00-", None),
+        ("", "Res Aplic Aut Mais", "1.000,00", None, "1,00"),
+        ("", "SALDO APLIC AUT MAIS", None, None, "1.499,00"),
+        ("31/07", "Saldo em C/C", None, None, "1,00"),
+        ("", "Saldo final", None, None, "1.500,00"),
+    ]
+    y = 250
+    for data, desc, ent, sai, saldo in linhas:
+        y += 12
+        t(150, y, data, 8)
+        t(208, y, desc, 8)
+        t(396, y, ent, 8, alinhar="direita")
+        t(458, y, sai, 8, alinhar="direita")
+        t(549, y, saldo, 8, alinhar="direita")
+    doc.nova_pagina()
+    t(40, 40, "CDB e Renda Fixa", 9)
+    t(40, 60, "CDB-DI 15/02/22 15/02/27 10.000,00 100,00% DI 12.000,00 11.500,00", 8)
+    t(40, 72, "total aplicações financeiras 10.000,00 12.000,00 11.500,00", 8)
+    return doc.gerar()
+
+
+def test_extrato_itau_organizado(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_extrato_itau()), "extrato.pdf")},
+                    content_type="multipart/form-data")
+    wb = load_workbook(BytesIO(r.data))
+    assert wb.sheetnames == ["Resumo", "Extrato", "Investimentos CDB"]
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "EMPRESA FICTICIA LTDA — Itaú ag. 1234 c/c 12345-6"
+    linhas = [tuple(c.value for c in ext[r][:9]) for r in range(6, 9)]
+    # as linhas internas da aplicação automática ficam de fora
+    assert [l[1:6] for l in linhas] == [
+        ("Sispag CLIENTE XPTO", "CLIENTE XPTO", "Recebimento Sispag", 2000, None),
+        ("BOLETO PAGO FORNECEDOR", "FORNECEDOR", "Boletos/contas pagas", None, 500),
+        ("PIX ENVIADO JOAO SILVA", "JOAO SILVA", "PIX enviado", None, 1000),
+    ]
+    # saldo do banco no fim do dia = aplicação automática + conta corrente, com conferência
+    assert linhas[1][7] == 2500 and linhas[2][7] == 1500 and linhas[0][7] is None
+    assert linhas[2][6] == "=G7+E8-F8" and linhas[2][8].startswith("=IF(ROUND(G8-H8,2)=0")
+    assert ext["B9"].value == "TOTAIS DO MÊS" and ext["E9"].value == "=SUM(E6:E8)"
+    res = wb["Resumo"]
+    assert [res.cell(i, 3).value for i in range(4, 8)] == [1000, 2000, 1500, 1500]
+    assert res["A13"].value == "Recebimento Sispag" and res["B13"].value.startswith("=SUMIFS(")
+    inv = wb["Investimentos CDB"]
+    assert [c.value for c in inv[4]][:7][3:] == [10000, 1, 12000, 11500]
+
+
+def test_extrato_itau_no_modo_layout_fica_simples(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_extrato_itau()), "e.pdf"), "modo": "layout"},
+                    content_type="multipart/form-data")
+    assert load_workbook(BytesIO(r.data)).sheetnames == ["PDF"]

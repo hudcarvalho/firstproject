@@ -22,7 +22,7 @@ def pdf_excel():
     if not conteudo.startswith(b"%PDF"):
         flash("O arquivo escolhido não é um PDF.", "danger")
         return redirect(url_for("ferramentas.pdf_excel"))
-    modo = request.form.get("modo") if request.form.get("modo") in MODOS else "layout"
+    modo = request.form.get("modo") if request.form.get("modo") in MODOS else "auto"
     try:
         planilha, paginas, linhas = converter(
             conteudo, modo=modo, aba_por_pagina=request.form.get("aba_por_pagina") == "on",

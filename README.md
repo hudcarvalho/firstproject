@@ -82,6 +82,12 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   alinhamento — balancetes, razões, demonstrativos) ou "Somente tabelas com linhas/bordas"; valores
   1.234,56 / (1.234,56) / 1.234,56- viram números; opção de uma aba por página. O arquivo não fica
   guardado. Só PDFs com texto (escaneados precisam de OCR antes). Usa a biblioteca `pdfplumber`.
+  No modo **Automático**, o **extrato mensal do Itaú** é reconhecido e sai organizado: aba *Resumo*
+  (saldos, entradas e saídas calculados × impressos pelo banco, e movimentação por tipo), aba
+  *Extrato* (data, histórico, favorecido/remetente, tipo, entrada, saída, saldo por fórmula e, no fim
+  de cada dia, o saldo do banco — conta corrente + aplicação automática — com "Confere") e aba
+  *Investimentos CDB* (carteira com rendimento e IR/IOF estimado). As movimentações internas da
+  aplicação automática não entram como lançamento.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

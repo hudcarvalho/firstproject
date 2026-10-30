@@ -12,7 +12,8 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 MAX_PAGINAS = 150
-MODOS = {"layout": "Layout da página (relatórios, com ou sem bordas)",
+MODOS = {"auto": "Automático (reconhece o extrato mensal do Itaú; nos demais, layout da página)",
+         "layout": "Layout da página (relatórios, com ou sem bordas)",
          "tabelas": "Somente tabelas com linhas/bordas"}
 
 _NUMERO = re.compile(r"^(?P<neg1>[-(])?\s*(?:R\$\s*)?(?P<num>\d{1,3}(?:\.\d{3})*,\d{1,4}|\d+,\d{1,4})\s*(?P<neg2>[-)])?\s*(?P<dc>[DC])?$")
@@ -149,8 +150,11 @@ def _sem_colunas_vazias(linhas):
     return [[l[i] for i in usadas] for l in linhas]
 
 
-def converter(conteudo, modo="layout", aba_por_pagina=False, converter_numeros=True):
-    """PDF (bytes) -> (planilha .xlsx em bytes, nº de páginas, nº de linhas)."""
+def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=True):
+    """PDF (bytes) -> (planilha .xlsx em bytes, nº de páginas, nº de linhas).
+
+    No modo "auto", extrato mensal do Itaú vira a planilha organizada de app.extrato_itau
+    (resumo conferido com o banco, extrato classificado e investimentos)."""
     import pdfplumber
     from openpyxl import Workbook
     from openpyxl.styles import Font
@@ -165,6 +169,21 @@ def converter(conteudo, modo="layout", aba_por_pagina=False, converter_numeros=T
         pdf.close()
         raise ErroPDF(f"O PDF tem {total} páginas; o limite é {MAX_PAGINAS}. Divida o arquivo e converta por partes.")
 
+    if modo == "auto":
+        from . import extrato_itau
+        try:
+            reconhecido = extrato_itau.e_extrato_itau(pdf)
+        except Exception:
+            reconhecido = False
+        if reconhecido:
+            try:
+                ex = extrato_itau.ler(pdf)
+            finally:
+                pdf.close()
+            if ex.movimentos:
+                return extrato_itau.planilha(ex), total, len(ex.movimentos)
+            pdf = pdfplumber.open(BytesIO(conteudo))
+            paginas = pdf.pages
     extrair = _linhas_por_tabelas if modo == "tabelas" else _linhas_por_texto
     wb = Workbook()
     ws = wb.active
