@@ -11,68 +11,20 @@ As linhas internas da aplicação automática (Res/Apl Aplic Aut, SALDO APLIC AU
 movimento: servem só para conferir o saldo do fim do dia.
 """
 import re
-import unicodedata
-from dataclasses import dataclass, field
 from datetime import date, datetime
 from decimal import Decimal
-from io import BytesIO
+
+from .extrato_planilha import Extrato, Movimento, planilha, sem_acento, valor  # noqa: F401
 
 MESES = {"jan": 1, "fev": 2, "mar": 3, "abr": 4, "mai": 5, "jun": 6, "jul": 7, "ago": 8,
          "set": 9, "out": 10, "nov": 11, "dez": 12}
-NOMES_MES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto",
-             "setembro", "outubro", "novembro", "dezembro"]
 _VALOR = re.compile(r"^-?\d{1,3}(?:\.\d{3})*,\d{2}-?$")
 _DIA = re.compile(r"^(\d{2})/(\d{2})$")
 _CDB = re.compile(r"^(?P<produto>.+?)\s+(?P<ap>\d{2}/\d{2}/\d{2})\s+(?P<venc>\d{2}/\d{2}/\d{2})\s+"
                   r"(?P<valor>[\d.]+,\d{2})\s+(?P<taxa>[\d.]+,\d{2})%\s*DI\s+(?P<bruto>[\d.]+,\d{2})\s+"
                   r"(?P<liquido>[\d.]+,\d{2})$")
-
-# Tipos na ordem em que aparecem no resumo.
-TIPOS = [
-    "Aplicação em CDB", "Resgate de CDB", "Recebimento PIX/TED", "Recebimento Sispag",
-    "Cobrança (títulos liquidados)", "Depósitos", "Tributos/guias", "Transferência CC Itaú",
-    "PIX enviado", "TED/DOC enviado", "Pagamento Sispag", "Débito automático",
-    "Boletos/contas pagas", "Tarifas bancárias", "Juros/IOF", "Rendimento aplicação automática",
-    "Outras entradas", "Outras saídas",
-]
-
-
-def _sem_acento(t):
-    return "".join(c for c in unicodedata.normalize("NFD", t) if unicodedata.category(c) != "Mn").upper()
-
-
-def _valor(t):
-    neg = t.startswith("-") or t.endswith("-")
-    v = Decimal(t.strip("-").replace(".", "").replace(",", "."))
-    return -v if neg else v
-
-
-@dataclass
-class Movimento:
-    data: date
-    historico: str
-    entrada: Decimal | None = None
-    saida: Decimal | None = None
-    saldo_banco: Decimal | None = None  # preenchido na última linha do dia
-    favorecido: str = ""
-    tipo: str = ""
-
-
-@dataclass
-class Extrato:
-    empresa: str = ""
-    agencia: str = ""
-    conta: str = ""
-    inicio: date | None = None
-    fim: date | None = None
-    saldo_anterior: Decimal | None = None
-    saldo_final: Decimal | None = None
-    total_entradas: Decimal | None = None
-    total_saidas: Decimal | None = None
-    tem_aplicacao_automatica: bool = False
-    movimentos: list = field(default_factory=list)
-    cdbs: list = field(default_factory=list)  # dicts
-    total_cdb: tuple | None = None  # (aplicado, bruto, líquido) impressos pelo banco
+_sem_acento = sem_acento
+_valor = valor
 
 
 def e_extrato_itau(pdf):
@@ -159,7 +111,7 @@ def _tipo(hist, entrada, debitos_automaticos):
 
 def ler(pdf):
     """Lê o extrato (pdfplumber aberto) e devolve um Extrato."""
-    ex = Extrato()
+    ex = Extrato(banco="Itaú", origem_resumo="na 1ª página do extrato")
     pagina1 = pdf.pages[0].extract_text() or ""
     m = re.search(r"extrato mensal ag (\d+) cc ([\d-]+) (\w{3}) (\d{4})", pagina1)
     if m:
@@ -285,6 +237,8 @@ def ler(pdf):
     fechar_dia()
     if ex.inicio and ex.saldo_anterior is not None:
         ex.inicio = ex.inicio.replace(day=1)
+    if ex.tem_aplicacao_automatica:
+        ex.nota_saldo = "saldo = conta corrente + aplicação automática Aplic Aut Mais"
 
     # carteira de CDB / renda fixa
     for page in pdf.pages:
@@ -303,182 +257,3 @@ def ler(pdf):
         if m:
             ex.total_cdb = tuple(_valor(x) for x in m.groups())
     return ex
-
-
-# ---------------------------------------------------------------- planilha
-
-def planilha(ex):
-    from openpyxl import Workbook
-    from openpyxl.styles import Alignment, Font, PatternFill
-    from openpyxl.workbook.properties import CalcProperties
-
-    MOEDA = '#,##0.00;[Red]\\-#,##0.00;\\-'
-    cab_fonte = Font(bold=True, color="FFFFFF", size=11)
-    cab_fundo = PatternFill("solid", fgColor="1F3864")
-    azul = Font(color="0000FF", size=10)
-    normal = Font(size=10)
-    cinza = PatternFill("solid", fgColor="F2F2F2")
-    fim = ex.fim or (ex.movimentos[-1].data if ex.movimentos else None)
-    inicio = ex.inicio
-    mes_ano = f"{NOMES_MES[fim.month - 1]}/{fim.year}" if fim else ""
-    conta = f"Itaú ag. {ex.agencia} c/c {ex.conta}"
-    titulo = " — ".join(x for x in (ex.empresa, conta) if x)
-
-    def cabecalho(ws, linha, textos):
-        for i, t in enumerate(textos, start=1):
-            c = ws.cell(linha, i, t)
-            c.font, c.fill = cab_fonte, cab_fundo
-            c.alignment = Alignment(horizontal="center", vertical="center", wrap_text=True)
-
-    def fmt(c, formato=MOEDA, fonte=normal):
-        c.number_format = formato
-        c.font = fonte
-        return c
-
-    wb = Workbook()
-    resumo = wb.active
-    resumo.title = "Resumo"
-    ext = wb.create_sheet("Extrato")
-
-    # ---- Extrato
-    ext["A1"] = titulo
-    ext["A1"].font = Font(bold=True, size=12)
-    periodo = f"Extrato de {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}" if inicio and fim else "Extrato"
-    if ex.tem_aplicacao_automatica:
-        periodo += " (saldo = conta corrente + aplicação automática Aplic Aut Mais)"
-    ext["A2"] = periodo
-    ext["A2"].font = normal
-    cabecalho(ext, 4, ["Data", "Histórico (banco)", "Favorecido / Remetente", "Tipo", "Entrada (R$)",
-                       "Saída (R$)", "Saldo (R$)", "Saldo banco fim do dia (R$)", "Confere"])
-    data_anterior = None
-    if inicio:
-        from datetime import timedelta
-        data_anterior = inicio - timedelta(days=1)
-    ext["A5"] = data_anterior
-    ext["B5"] = "SALDO ANTERIOR"
-    ext["G5"] = ex.saldo_anterior
-    for col in "ABCDEFGHI":
-        c = ext[f"{col}5"]
-        c.font, c.fill = Font(bold=True, size=10), cinza
-    ext["A5"].number_format = "dd/mm/yyyy"
-    ext["G5"].number_format = MOEDA
-    ext["G5"].font = Font(bold=True, size=10, color="0000FF")
-    r = 5
-    for m in ex.movimentos:
-        r += 1
-        ext.cell(r, 1, m.data).number_format = "dd/mm/yyyy"
-        ext.cell(r, 1).font = normal
-        ext.cell(r, 2, m.historico).font = normal
-        ext.cell(r, 3, m.favorecido or None).font = normal
-        ext.cell(r, 4, m.tipo).font = normal
-        fmt(ext.cell(r, 5, m.entrada))
-        fmt(ext.cell(r, 6, m.saida))
-        fmt(ext.cell(r, 7, f"=G{r - 1}+E{r}-F{r}"))
-        if m.saldo_banco is not None:
-            fmt(ext.cell(r, 8, m.saldo_banco), fonte=azul)
-            ext.cell(r, 9, f'=IF(ROUND(G{r}-H{r},2)=0,"OK","DIVERGE")').font = normal
-    ultima = r
-    total = ultima + 1
-    ext.cell(total, 2, "TOTAIS DO MÊS")
-    fmt(ext.cell(total, 5, f"=SUM(E6:E{ultima})"))
-    fmt(ext.cell(total, 6, f"=SUM(F6:F{ultima})"))
-    fmt(ext.cell(total, 7, f"=G{ultima}"))
-    for col in range(1, 10):
-        ext.cell(total, col).font = Font(bold=True, size=10)
-        ext.cell(total, col).fill = cinza
-    for col, w in zip("ABCDEFGHI", [11, 32, 26, 30, 15, 15, 15, 16, 9]):
-        ext.column_dimensions[col].width = w
-    ext.row_dimensions[4].height = 30
-    ext.freeze_panes = "A5"
-    ext.auto_filter.ref = f"A4:I{ultima}"
-
-    # ---- Resumo
-    resumo["A1"] = f"{titulo} — {mes_ano}" if mes_ano else titulo
-    resumo["A1"].font = Font(bold=True, size=12)
-    cabecalho(resumo, 3, ["Item", "Calculado (R$)", "Banco (R$)", "Diferença"])
-    itens = [
-        (f"Saldo em {data_anterior:%d/%m/%y}" if data_anterior else "Saldo anterior", "=Extrato!G5", ex.saldo_anterior),
-        ("Entradas (créditos)", f"=Extrato!E{total}", ex.total_entradas),
-        ("Saídas (débitos)", f"=Extrato!F{total}", ex.total_saidas),
-        (f"Saldo em {fim:%d/%m/%y}" if fim else "Saldo final", f"=Extrato!G{ultima}", ex.saldo_final),
-    ]
-    for i, (rotulo, formula, banco) in enumerate(itens, start=4):
-        resumo.cell(i, 1, rotulo).font = normal
-        fmt(resumo.cell(i, 2, formula))
-        fmt(resumo.cell(i, 3, banco), fonte=azul)
-        fmt(resumo.cell(i, 4, f"=ROUND(B{i}-C{i},2)" if banco is not None else None))
-    resumo["A9"] = ("Valores em azul: resumo impresso pelo Itaú na 1ª página do extrato. "
-                    "Diferença zero = planilha confere com o banco.")
-    resumo["A9"].font = Font(size=9)
-    resumo["A11"] = "Movimentação por tipo"
-    resumo["A11"].font = Font(bold=True, size=11)
-    cabecalho(resumo, 12, ["Tipo", "Entradas (R$)", "Saídas (R$)", "Líquido (R$)", "Qtde"])
-    presentes = [t for t in TIPOS if any(m.tipo == t for m in ex.movimentos)]
-    faixa = f"$6:$D${ultima}"
-    r = 12
-    for t in presentes:
-        r += 1
-        resumo.cell(r, 1, t).font = normal
-        fmt(resumo.cell(r, 2, f"=SUMIFS(Extrato!$E$6:$E${ultima},Extrato!$D$6:$D${ultima},$A{r})"))
-        fmt(resumo.cell(r, 3, f"=SUMIFS(Extrato!$F$6:$F${ultima},Extrato!$D$6:$D${ultima},$A{r})"))
-        fmt(resumo.cell(r, 4, f"=B{r}-C{r}"))
-        resumo.cell(r, 5, f"=COUNTIF(Extrato!$D$6:$D${ultima},$A{r})").font = normal
-    r += 1
-    resumo.cell(r, 1, "TOTAL")
-    for col, letra in ((2, "B"), (3, "C"), (4, "D"), (5, "E")):
-        c = resumo.cell(r, col, f"=SUM({letra}13:{letra}{r - 1})")
-        if col < 5:
-            c.number_format = MOEDA
-    for col in range(1, 6):
-        resumo.cell(r, col).font = Font(bold=True, size=10)
-        resumo.cell(r, col).fill = cinza
-    for col, w in zip("ABCDE", [34, 16, 16, 16, 8]):
-        resumo.column_dimensions[col].width = w
-    resumo.row_dimensions[3].height = resumo.row_dimensions[12].height = 20
-
-    # ---- Investimentos CDB
-    if ex.cdbs:
-        inv = wb.create_sheet("Investimentos CDB")
-        inv["A1"] = f"Carteira CDB e Renda Fixa — posição em {fim:%d/%m/%Y}" if fim else "Carteira CDB e Renda Fixa"
-        inv["A1"].font = Font(bold=True, size=12)
-        dia = f"{fim:%d/%m/%y}" if fim else ""
-        cabecalho(inv, 3, ["Produto", "Data aplicação", "Vencimento", "Valor aplicado (R$)", "Remuneração (% DI)",
-                           f"Saldo bruto {dia} (R$)", f"Saldo líquido {dia} (R$)", "Rendimento bruto (R$)",
-                           "IR/IOF estimado (R$)"])
-        r = 3
-        for c in ex.cdbs:
-            r += 1
-            inv.cell(r, 1, c["produto"]).font = normal
-            for col, chave in ((2, "aplicacao"), (3, "vencimento")):
-                inv.cell(r, col, c[chave]).number_format = "dd/mm/yyyy"
-                inv.cell(r, col).font = normal
-            fmt(inv.cell(r, 4, c["valor"]))
-            fmt(inv.cell(r, 5, c["taxa"]), "0.00%")
-            fmt(inv.cell(r, 6, c["bruto"]))
-            fmt(inv.cell(r, 7, c["liquido"]))
-            fmt(inv.cell(r, 8, f"=F{r}-D{r}"))
-            fmt(inv.cell(r, 9, f"=F{r}-G{r}"))
-        ult = r
-        r += 1
-        inv.cell(r, 1, "TOTAL")
-        for col, letra in ((4, "D"), (6, "F"), (7, "G"), (8, "H"), (9, "I")):
-            fmt(inv.cell(r, col, f"=SUM({letra}4:{letra}{ult})"), fonte=Font(bold=True, size=10))
-        for col in range(1, 10):
-            inv.cell(r, col).fill = cinza
-            if col < 4:
-                inv.cell(r, col).font = Font(bold=True, size=10)
-        if ex.total_cdb:
-            def br(v):
-                return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
-            inv.cell(r + 2, 1, f"Totais do banco: aplicado {br(ex.total_cdb[0])} · saldo bruto {br(ex.total_cdb[1])} · "
-                               f"saldo líquido {br(ex.total_cdb[2])}.").font = Font(size=9)
-        for col, w in zip("ABCDEFGHI", [11, 13, 12, 17, 13, 19, 19, 17, 17]):
-            inv.column_dimensions[col].width = w
-        inv.row_dimensions[3].height = 30
-        inv.freeze_panes = "A4"
-        inv.auto_filter.ref = f"A3:I{ult}"
-
-    wb.calculation = CalcProperties(fullCalcOnLoad=True)
-    saida = BytesIO()
-    wb.save(saida)
-    return saida.getvalue()
