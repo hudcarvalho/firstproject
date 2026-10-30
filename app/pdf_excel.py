@@ -12,7 +12,7 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 MAX_PAGINAS = 150
-MODOS = {"auto": "Automático (reconhece extratos do Itaú e do Bradesco; nos demais, layout da página)",
+MODOS = {"auto": "Automático (reconhece extratos do Itaú, Bradesco e Santander; nos demais, layout da página)",
          "layout": "Layout da página (relatórios, com ou sem bordas)",
          "tabelas": "Somente tabelas com linhas/bordas"}
 
@@ -170,13 +170,15 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
         raise ErroPDF(f"O PDF tem {total} páginas; o limite é {MAX_PAGINAS}. Divida o arquivo e converta por partes.")
 
     if modo == "auto":
-        from . import extrato_bradesco, extrato_itau
+        from . import extrato_bradesco, extrato_itau, extrato_santander
         from .extrato_planilha import planilha
         leitor = None
-        for banco in (extrato_itau, extrato_bradesco):
+        for reconhece, ler in ((extrato_itau.e_extrato_itau, extrato_itau.ler),
+                               (extrato_bradesco.e_extrato_bradesco, extrato_bradesco.ler),
+                               (extrato_santander.e_extrato_santander, extrato_santander.ler)):
             try:
-                if (extrato_itau.e_extrato_itau if banco is extrato_itau else extrato_bradesco.e_extrato_bradesco)(pdf):
-                    leitor = banco.ler
+                if reconhece(pdf):
+                    leitor = ler
                     break
             except Exception:
                 pass
@@ -230,3 +232,40 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
     saida = BytesIO()
     wb.save(saida)
     return saida.getvalue(), total, total_linhas
+
+
+# ---------------------------------------------------------------- extratos em planilha (Stone)
+
+def e_planilha(conteudo):
+    """.xlsx (zip) ou .xls antigo (OLE)."""
+    return conteudo[:2] == b"PK" or conteudo[:8] == b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1"
+
+
+def _linhas_planilha(conteudo):
+    if conteudo[:2] == b"PK":
+        from openpyxl import load_workbook
+        ws = load_workbook(BytesIO(conteudo), data_only=True).worksheets[0]
+        return [list(r) for r in ws.iter_rows(values_only=True)]
+    import xlrd
+    sh = xlrd.open_workbook(file_contents=conteudo).sheet_by_index(0)
+    return [sh.row_values(i) for i in range(sh.nrows)]
+
+
+def converter_planilha(conteudo):
+    """Extrato exportado em planilha (hoje: Stone) -> (planilha organizada, linhas lidas, movimentos)."""
+    from . import extrato_stone
+    from .extrato_planilha import planilha
+    import warnings
+    try:
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            linhas = _linhas_planilha(conteudo)
+    except Exception as e:
+        raise ErroPDF("Não foi possível ler a planilha. Confira se é um arquivo Excel válido.") from e
+    if not extrato_stone.e_extrato_stone(linhas):
+        raise ErroPDF("Planilha não reconhecida. Por enquanto, em Excel, só o extrato da Stone é organizado "
+                      "automaticamente; os demais extratos devem ser enviados em PDF.")
+    ex = extrato_stone.ler(linhas)
+    if not ex.movimentos:
+        raise ErroPDF("Nenhuma movimentação encontrada no extrato.")
+    return planilha(ex), len(linhas) - 1, len(ex.movimentos)

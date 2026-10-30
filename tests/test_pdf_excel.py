@@ -226,3 +226,110 @@ def test_extrato_bradesco_organizado(client):
     assert [res.cell(i, 3).value for i in range(4, 8)] == [1000, 5001.12, 4401.12, 1600]
     assert res["B5"].value == "=Extrato!F10" and "Extrato!$E$6:$E$9" in res["B13"].value
     assert [c.value for c in wb["Invest Fácil"][5]][1:] == ["SALDO INVEST FÁCIL", 1001.12]
+
+
+def _pdf_extrato_santander():
+    """Extrato do app Santander Empresas (do mais novo para o mais antigo), dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(358, 45, "Aplicativo Santander Empresas", 9)
+    t(34, 94, "EMPRESA SANTA LTDA", 9)
+    t(367, 94, "Agência: 0086", 9)
+    t(484, 94, "Conta: 13000001", 9)
+    t(31, 138, "Períodos: 01/08/2026 a 31/08/2026", 9)
+    for x, texto in ((49, "Data"), (95, "Histórico"), (306, "Documento"), (423, "Valor (R$)"), (518, "Saldo (R$)")):
+        t(x, 168, texto, 9)
+
+    def lanc(y, data, hist, doc_, valor, saldo, acima=None, abaixo=None):
+        if acima:
+            t(92, y - 6.9, acima, 8)
+        t(33, y, data, 8)
+        t(92, y, hist, 8)
+        t(306, y, doc_, 8)
+        t(466, y, valor, 8, alinhar="direita")
+        t(564, y, saldo, 8, alinhar="direita")
+        if abaixo:
+            t(92, y + 6.9, abaixo, 8)
+
+    # mais novo primeiro; saldo anterior = 1.000,00
+    lanc(190, "02/08/2026", "Pix Recebido 12345678000190", "", "500,00", "-1.270,00")
+    lanc(215, "02/08/2026", "", "0000531587", "3.000,00", "-1.770,00", acima="Pagamento Cartao De Credito",
+         abaixo="STONE-MASTER")
+    lanc(240, "01/08/2026", "Tarifa Avulsa Envio Pix", "", "-20,00", "-4.770,00")
+    lanc(265, "01/08/2026", "", "14354062", "-5.750,00", "-4.750,00", acima="Pix Enviado JOAO DA SILVA",
+         abaixo="SAURO")
+    t(31, 300, "Saldo Disponível -1.270,00", 9)
+    return doc.gerar()
+
+
+def test_extrato_santander_organizado(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_extrato_santander()), "extrato.pdf")},
+                    content_type="multipart/form-data")
+    wb = load_workbook(BytesIO(r.data))
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "EMPRESA SANTA LTDA — Santander ag. 0086 c/c 13000001"
+    assert ext["H5"].value == 1000  # saldo anterior calculado a partir do lançamento mais antigo
+    linhas = [tuple(c.value for c in ext[r][1:9]) for r in range(6, 10)]
+    assert linhas == [  # em ordem cronológica
+        ("Pix Enviado", "14354062", "JOAO DA SILVA SAURO", "PIX enviado", None, 5750, "=H5+F6-G6", -4750),
+        ("Tarifa Avulsa Envio Pix", None, None, "Tarifas bancárias", None, 20, "=H6+F7-G7", -4770),
+        ("Pagamento Cartao De Credito", "0000531587", "STONE-MASTER", "Recebíveis de cartão", 3000, None,
+         "=H7+F8-G8", -1770),
+        ("Pix Recebido", None, "12345678000190", "Recebimento PIX/TED", 500, None, "=H8+F9-G9", -1270),
+    ]
+    res = wb["Resumo"]
+    assert [res.cell(i, 3).value for i in range(4, 8)] == [1000, None, None, -1270]
+
+
+def _xlsx_extrato_stone():
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.append(["Movimentação", "Tipo", "Valor", "Saldo antes", "Saldo depois", "Tarifa", "Data", "Nosso Número",
+               "Situação", "Destino", "Destino Documento", "Destino Instituição", "Destino Agência", "Destino Conta",
+               "Origem", "Origem Documento", "Origem Instituição", "Origem Agência", "Origem Conta"])
+    dono = ["Loja Teste", "11.222.333/0001-81", "Stone Instituição de Pagamento S.A.", "0001", "123-4"]
+    desc = ["Desconhecido"] * 5
+    # do mais novo para o mais antigo; dois lançamentos no mesmo minuto
+    ws.append(["Débito", "Pix", "-100,00", "R$ 1.151,61", "R$ 1.051,61", "Grátis", "02/09/2026 10:00", None,
+               "Enviado", "FORNECEDOR X", "99.888.777/0001-66", "Banco Y", "Desconhecido", "Desconhecido"] + dono)
+    ws.append(["Crédito", "Pagamento", "150,00", "R$ 1.003,61", "R$ 1.151,61", "R$ 2,00", "01/09/2026 09:30",
+               "34190000000000000001", "Recebido"] + dono + desc)
+    ws.append(["Crédito", "Transação", "4,00", "R$ 1.000,00", "R$ 1.003,61", "R$ 0,39", "01/09/2026 09:30", None,
+               "FINISHED"] + dono + ["MARIA CLIENTE", "***.111.222-**", "Banco Z", "Desconhecido", "Desconhecido"])
+    saida = BytesIO()
+    wb.save(saida)
+    return saida.getvalue()
+
+
+def test_extrato_stone_em_planilha(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_xlsx_extrato_stone()), "STONE.xls")},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200 and "STONE.xlsx" in r.headers["Content-Disposition"]
+    wb = load_workbook(BytesIO(r.data))
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "Loja Teste — Stone ag. 0001 c/c 123-4"
+    linhas = [tuple(c.value for c in ext[r][1:10]) for r in range(6, 11)]
+    # a tarifa vira uma linha própria logo abaixo, e o saldo do banco fica nela
+    assert [(l[0], l[3], l[4], l[5], l[7]) for l in linhas] == [
+        ("Transação (crédito) 09:30", "Transações recebidas", 4, None, None),
+        ("Tarifa Stone (Transação)", "Tarifas bancárias", None, 0.39, 1003.61),
+        ("Pagamento (crédito) 09:30", "Boletos recebidos", 150, None, None),
+        ("Tarifa Stone (Pagamento)", "Tarifas bancárias", None, 2, 1151.61),
+        ("Pix enviado 10:00", "PIX enviado", None, 100, 1051.61),
+    ]
+    assert linhas[2][1] == "34190000000000000001" and linhas[0][2] == "MARIA CLIENTE · ***.111.222-**"
+    assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [1000, None, None, 1051.61]
+
+
+def test_planilha_nao_reconhecida(client):
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    wb.active.append(["qualquer", "coisa"])
+    arq = BytesIO()
+    wb.save(arq)
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(arq.getvalue()), "x.xlsx")},
+                    content_type="multipart/form-data", follow_redirects=True)
+    assert "Planilha não reconhecida" in r.get_data(as_text=True)

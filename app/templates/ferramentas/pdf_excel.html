@@ -5,8 +5,8 @@
 <form method="post" enctype="multipart/form-data" class="card" style="max-width: 760px" id="form-pdf-excel"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="card-body">
     <div class="mb-3">
-      <label class="form-label" for="arquivo">Arquivo PDF</label>
-      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf" required>
+      <label class="form-label" for="arquivo">Arquivo PDF (ou extrato da Stone em Excel)</label>
+      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf,.xls,.xlsx" required>
       <div class="form-text">Até 10 MB e {{ max_paginas }} páginas. O arquivo é convertido na hora e não fica guardado no sistema.</div>
     </div>
     <div class="mb-3">
@@ -17,9 +17,10 @@
         <label class="form-check-label" for="modo-{{ valor }}">{{ rotulo }}</label>
       </div>
       {% endfor %}
-      <div class="form-text">No automático, os extratos do <strong>Itaú</strong> (mensal) e do <strong>Bradesco</strong> (mensal /
-        por período) saem organizados em abas: Resumo conferido com o banco, Extrato com tipo, favorecido, saldo e
-        conferência, e as abas de investimentos (CDB no Itaú; Invest Fácil e últimos lançamentos no Bradesco). Os demais PDFs
+      <div class="form-text">No automático, os extratos do <strong>Itaú</strong> (mensal), <strong>Bradesco</strong> (mensal /
+        por período), <strong>Santander</strong> (app Santander Empresas) e da <strong>Stone</strong> (planilha exportada) saem
+        organizados em abas: Resumo conferido com o banco, Extrato com tipo, favorecido, saldo e conferência, e as abas
+        de investimentos (CDB no Itaú; Invest Fácil e últimos lançamentos no Bradesco). Os demais PDFs
         usam o layout da página, que traz todo o texto e forma as colunas pelo alinhamento (balancetes, razões,
         demonstrativos). “Somente tabelas” pega só as tabelas desenhadas com bordas.</div>
     </div>
