@@ -27,7 +27,7 @@ body { background: #f5f6f8; }
 .planilha .filtro-dist { flex: 0 0 auto; width: 12.5rem; }
 
 /* Aba Obrigações: células editáveis como planilha */
-.tabela-obrigacoes td.p-0 .celula { border: 0; border-radius: 0; background: transparent; min-width: 105px; }
+.tabela-obrigacoes td.p-0 .celula { border: 0; border-radius: 0; background: transparent; min-width: 125px; }
 .tabela-obrigacoes td.p-0 .celula[data-campo="observacao"] { min-width: 260px; }
 .tabela-obrigacoes .celula:focus { background: #fffbe6; box-shadow: inset 0 0 0 2px #0d6efd; }
 .tabela-obrigacoes .celula.salvo { background: #d1e7dd; transition: background .3s; }

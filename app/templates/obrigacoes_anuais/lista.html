@@ -31,7 +31,13 @@
         <option value="">Todas</option>
         {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
       </select></th>
-      <th colspan="5"></th>
+      {% for c in ('defis', 'ecd', 'ecf', 'ibge', 'observacao') %}
+      <th><select class="form-select form-select-sm filtro-campo" data-campo="{{ c }}" aria-label="Filtrar {{ c|upper }}">
+        <option value="">Todos</option>
+        <option value="vazio">Em branco</option>
+        <option value="preenchido">Preenchidos</option>
+      </select></th>
+      {% endfor %}
     </tr>
   </thead>
   <tbody>
@@ -69,20 +75,27 @@
   const fCod = document.getElementById('f-codigo'), fNome = document.getElementById('f-nome'),
         fCnpj = document.getElementById('f-cnpj'), fReg = document.getElementById('f-regime');
   const contador = document.getElementById('contador');
+  const fCampos = [...document.querySelectorAll('.filtro-campo')];
   function filtrar() {
     const cod = fCod.value.trim().toLowerCase(), nome = fNome.value.trim().toLowerCase(),
           cnpj = fCnpj.value.replace(/\D/g, ''), reg = fReg.value;
+    const campos = fCampos.filter(f => f.value);
+    fCampos.forEach(f => f.classList.toggle('filtro-ativo', !!f.value));
     let n = 0;
     for (const tr of linhas) {
       const ok = (!cod || tr.dataset.codigo.includes(cod)) && (!nome || tr.dataset.nome.includes(nome))
-        && (!cnpj || tr.dataset.cnpj.includes(cnpj)) && (!reg || tr.dataset.regime === reg);
+        && (!cnpj || tr.dataset.cnpj.includes(cnpj)) && (!reg || tr.dataset.regime === reg)
+        && campos.every(f => {
+          const cheio = tr.querySelector(`.celula[data-campo="${f.dataset.campo}"]`).value.trim() !== '';
+          return f.value === 'preenchido' ? cheio : !cheio;
+        });
       tr.classList.toggle('d-none', !ok);
       if (ok) n++;
     }
     contador.textContent = `${n} de ${linhas.length} clientes`;
   }
   [fCod, fNome, fCnpj].forEach(i => i.addEventListener('input', filtrar));
-  fReg.addEventListener('change', filtrar);
+  [fReg, ...fCampos].forEach(s => s.addEventListener('change', filtrar));
   filtrar();
 
   // salvar célula
