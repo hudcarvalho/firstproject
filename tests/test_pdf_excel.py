@@ -333,3 +333,53 @@ def test_planilha_nao_reconhecida(client):
     r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(arq.getvalue()), "x.xlsx")},
                     content_type="multipart/form-data", follow_redirects=True)
     assert "Planilha não reconhecida" in r.get_data(as_text=True)
+
+
+def _pdf_itau_periodo():
+    """Itaú Empresas "Lançamentos do período" (do mais novo para o mais antigo), dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(34, 87, "EMPRESA ITAU LTDA CNPJ 11.222.333/0001-81 Agência 1234 Conta 0012345-6", 9)
+    t(34, 181, "Lançamentos do período: 01/10/2026 até 31/10/2026", 9)
+    for x, texto in ((35, "Data"), (91, "Lançamentos"), (227, "Razão Social"), (364, "CNPJ/CPF"),
+                     (472, "Valor (R$)"), (521, "Saldo (R$)")):
+        t(x, 207, texto, 9)
+
+    def linha(y, data, lanc="", razao="", doc_="", valor="", saldo=""):
+        t(35, y, data, 8)
+        t(91, y, lanc, 8)
+        t(227, y, razao, 8)
+        t(364, y, doc_, 8)
+        t(509, y, valor, 8, alinhar="direita")
+        t(558, y, saldo, 8, alinhar="direita")
+
+    linha(220, "02/10/2026", "SALDO TOTAL DISPONÍVEL DIA", saldo="1.700,00")
+    linha(233, "02/10/2026", "PIX RECEBIDO CLIENTE02/10", "CLIENTE BOM LTDA", "99.888.777/0001-66", "1.000,00")
+    t(91, 253.7, "RENDIMENTOS REND PAGO APLIC", 8)                  # lançamento quebrado acima/abaixo
+    linha(246, "01/10/2026", "SALDO TOTAL DISPONÍVEL DIA", saldo="700,00")
+    linha(259, "01/10/2026", "", "", "", "0,50")
+    t(91, 264.3, "AUT MAIS", 8)
+    t(227, 274.7, "FORNECEDOR DE PECAS E", 8)                         # razão social quebrada
+    linha(280, "01/10/2026", "PAGAMENTOS", "SERVICOS INDUSTRIAIS", "12.345.678/0001-90", "-300,50")
+    t(227, 285.3, "LTDA", 8)
+    linha(298, "30/09/2026", "SALDO ANTERIOR", saldo="1.000,00")
+    t(34, 330, "aviso: Os saldos acima são baseados nas informações disponíveis", 7)
+    return doc.gerar()
+
+
+def test_extrato_itau_lancamentos_do_periodo(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_itau_periodo()), "extrato.pdf")},
+                    content_type="multipart/form-data")
+    wb = load_workbook(BytesIO(r.data))
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "EMPRESA ITAU LTDA — Itaú ag. 1234 c/c 0012345-6"
+    assert ext["G5"].value == 1000
+    linhas = [tuple(c.value for c in ext[r][1:8]) for r in range(6, 9)]
+    assert linhas == [
+        ("PAGAMENTOS", "FORNECEDOR DE PECAS E SERVICOS INDUSTRIAIS LTDA · 12.345.678/0001-90", "Pagamento Sispag",
+         None, 300.5, "=G5+E6-F6", None),
+        ("RENDIMENTOS REND PAGO APLIC AUT MAIS", None, "Rendimento aplicação automática", 0.5, None, "=G6+E7-F7", 700),
+        ("PIX RECEBIDO CLIENTE02/10", "CLIENTE BOM LTDA · 99.888.777/0001-66", "Recebimento PIX/TED", 1000, None,
+         "=G7+E8-F8", 1700),
+    ]
+    assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [1000, None, None, 1700]

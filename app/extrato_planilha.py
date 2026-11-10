@@ -24,7 +24,7 @@ TIPOS = [
     "Tributos/guias", "Transferência CC Itaú", "Transferência entre contas", "PIX enviado",
     "TED/DOC enviado", "Pagamento Sispag", "Débito automático", "Transações debitadas (Stone)",
     "Boletos/contas pagas",
-    "Cartão de crédito", "Tarifas bancárias", "Juros/IOF", "Seguros", "Rendimento aplicação automática",
+    "Cartão de crédito", "Compras no cartão de débito", "Tarifas bancárias", "Juros/IOF", "Seguros", "Rendimento aplicação automática",
     "Rendimento Invest Fácil", "Outras entradas", "Outras saídas",
 ]
 
