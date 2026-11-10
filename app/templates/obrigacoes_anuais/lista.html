@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Obrigações {{ ano }}{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h1 class="h3 mb-0">Obrigações</h1>
+  <form class="d-flex align-items-center gap-2" method="get">
+    <label class="small mb-0" for="ano">Ano</label>
+    <select class="form-select form-select-sm w-auto" name="ano" id="ano" onchange="this.form.submit()">
+      {% for a in anos %}<option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>{% endfor %}
+    </select>
+    <a class="btn btn-sm btn-outline-success" href="{{ url_for('obrigacoes_anuais.exportar', ano=ano) }}">Exportar Excel</a>
+  </form>
+</div>
+<div class="d-flex align-items-center gap-3 mb-2 small">
+  <span class="text-muted">Digite direto na tabela: cada campo é salvo ao sair dele (Enter desce para a linha de baixo).</span>
+  <span class="ms-auto text-muted" id="contador"></span>
+  <span id="status-salvar" class="small"></span>
+</div>
+<div class="card"><div class="table-responsive planilha">
+<table class="table table-sm table-bordered align-middle mb-0 tabela-obrigacoes" id="tabela"
+       data-url="{{ url_for('obrigacoes_anuais.salvar') }}" data-ano="{{ ano }}" data-csrf="{{ csrf_token() }}">
+  <thead>
+    <tr class="titulos">
+      {% for c in colunas %}<th class="{{ 'text-center' if loop.index in (5, 6, 7, 8) }}">{{ c }}</th>{% endfor %}
+    </tr>
+    <tr class="filtros">
+      <th><input type="search" class="form-control form-control-sm" id="f-codigo" placeholder="Filtrar…" autocomplete="off"></th>
+      <th><input type="search" class="form-control form-control-sm" id="f-nome" placeholder="Filtrar empresa…" autocomplete="off"></th>
+      <th><input type="search" class="form-control form-control-sm" id="f-cnpj" placeholder="Filtrar…" autocomplete="off" inputmode="numeric"></th>
+      <th><select class="form-select form-select-sm" id="f-regime">
+        <option value="">Todas</option>
+        {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
+      </select></th>
+      <th colspan="5"></th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for e in empresas %}{% set r = registros.get(e.id) %}
+    <tr data-id="{{ e.id }}" data-codigo="{{ (e.codigo or '')|lower }}" data-nome="{{ e.razao_social|lower }}"
+        data-cnpj="{{ e.cnpj }}" data-regime="{{ e.regime_id }}">
+      <td class="text-end">{{ e.codigo or '' }}</td>
+      <td style="min-width: 260px"><a href="{{ url_for('main.empresa_detalhe', id=e.id) }}" class="link-dark text-decoration-none">{{ e.razao_social }}</a></td>
+      <td class="text-nowrap">{{ e.cnpj|documento }}</td>
+      <td class="text-nowrap">{{ e.regime.nome|upper }}</td>
+      {% for c in ('defis', 'ecd', 'ecf', 'ibge') %}
+      <td class="p-0"><input type="text" class="form-control form-control-sm celula data text-center" data-campo="{{ c }}"
+          inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" value="{{ r[c].strftime('%d/%m/%Y') if r and r[c] else '' }}"
+          aria-label="{{ c|upper }} {{ e.razao_social }}"></td>
+      {% endfor %}
+      <td class="p-0"><input type="text" class="form-control form-control-sm celula" data-campo="observacao" maxlength="255"
+          value="{{ r.observacao if r and r.observacao else '' }}" aria-label="Observação {{ e.razao_social }}"></td>
+    </tr>
+    {% else %}
+    <tr><td colspan="9" class="text-center text-muted py-4">Nenhum cliente ativo cadastrado.</td></tr>
+    {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const tabela = document.getElementById('tabela');
+  const status = document.getElementById('status-salvar');
+  const linhas = [...tabela.tBodies[0].rows].filter(tr => tr.dataset.id);
+
+  // filtros
+  const fCod = document.getElementById('f-codigo'), fNome = document.getElementById('f-nome'),
+        fCnpj = document.getElementById('f-cnpj'), fReg = document.getElementById('f-regime');
+  const contador = document.getElementById('contador');
+  function filtrar() {
+    const cod = fCod.value.trim().toLowerCase(), nome = fNome.value.trim().toLowerCase(),
+          cnpj = fCnpj.value.replace(/\D/g, ''), reg = fReg.value;
+    let n = 0;
+    for (const tr of linhas) {
+      const ok = (!cod || tr.dataset.codigo.includes(cod)) && (!nome || tr.dataset.nome.includes(nome))
+        && (!cnpj || tr.dataset.cnpj.includes(cnpj)) && (!reg || tr.dataset.regime === reg);
+      tr.classList.toggle('d-none', !ok);
+      if (ok) n++;
+    }
+    contador.textContent = `${n} de ${linhas.length} clientes`;
+  }
+  [fCod, fNome, fCnpj].forEach(i => i.addEventListener('input', filtrar));
+  fReg.addEventListener('change', filtrar);
+  filtrar();
+
+  // salvar célula
+  let pendentes = 0;
+  function mostrar(texto, classe) { status.textContent = texto; status.className = 'small ' + classe; }
+  async function salvar(inp) {
+    if (inp.value === inp.dataset.salvo) return;
+    if (inp.classList.contains('data') && inp.value && !/^\d{2}\/\d{2}\/\d{4}$/.test(inp.value)) {
+      inp.classList.add('is-invalid'); mostrar('⚠ Data inválida. Use dd/mm/aaaa.', 'text-danger'); return;
+    }
+    const tr = inp.closest('tr');
+    const dados = new URLSearchParams({empresa_id: tr.dataset.id, ano: tabela.dataset.ano,
+                                       campo: inp.dataset.campo, valor: inp.value});
+    pendentes++; mostrar('Salvando…', 'text-muted');
+    try {
+      const r = await fetch(tabela.dataset.url, {method: 'POST', body: dados,
+        headers: {'X-CSRFToken': tabela.dataset.csrf}});
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok || !j.ok) throw new Error(j.erro || 'Não foi possível salvar');
+      inp.dataset.salvo = inp.value;
+      inp.classList.remove('is-invalid');
+      inp.classList.add('salvo'); setTimeout(() => inp.classList.remove('salvo'), 900);
+      if (--pendentes === 0) mostrar('✓ Salvo', 'text-success');
+    } catch (e) {
+      pendentes--;
+      inp.classList.add('is-invalid');
+      mostrar('⚠ ' + e.message, 'text-danger');
+    }
+  }
+  // máscara dd/mm/aaaa: digitar 30032026 vira 30/03/2026
+  function mascara(inp) {
+    const d = inp.value.replace(/\D/g, '').slice(0, 8);
+    inp.value = d.length > 4 ? `${d.slice(0, 2)}/${d.slice(2, 4)}/${d.slice(4)}`
+              : d.length > 2 ? `${d.slice(0, 2)}/${d.slice(2)}` : d;
+  }
+  for (const inp of tabela.querySelectorAll('.celula')) {
+    inp.dataset.salvo = inp.value;
+    if (inp.classList.contains('data')) inp.addEventListener('input', () => mascara(inp));
+    inp.addEventListener('change', () => salvar(inp));
+    inp.addEventListener('keydown', ev => {
+      if (ev.key !== 'Enter') return;
+      ev.preventDefault();
+      const col = inp.closest('td').cellIndex;
+      let tr = inp.closest('tr').nextElementSibling;
+      while (tr && tr.classList.contains('d-none')) tr = tr.nextElementSibling;
+      const prox = tr && tr.cells[col].querySelector('.celula');
+      if (prox) prox.focus(); else inp.blur();
+    });
+  }
+  window.addEventListener('beforeunload', ev => { if (pendentes > 0) { ev.preventDefault(); ev.returnValue = ''; } });
+})();
+</script>
+{% endblock %}

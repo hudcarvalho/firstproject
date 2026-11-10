@@ -93,6 +93,9 @@ def create_app(config=None):
     from .lalur import bp as bp_lalur
     app.register_blueprint(bp_lalur)
 
+    from .obrigacoes_anuais import bp as bp_obrigacoes_anuais
+    app.register_blueprint(bp_obrigacoes_anuais)
+
     from .ferramentas import bp as bp_ferramentas
     app.register_blueprint(bp_ferramentas)
 
