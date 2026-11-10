@@ -383,3 +383,42 @@ def test_extrato_itau_lancamentos_do_periodo(client):
          "=G7+E8-F8", 1700),
     ]
     assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [1000, None, None, 1700]
+
+
+def _pdf_extrato_caixa():
+    """Extrato por período da Caixa (uma linha por lançamento, valores com C/D), dados fictícios."""
+    doc = Documento("Extrato")
+    linhas = [
+        "01/02/2021 Internet Banking CAIXA", "Extrato por período", "Cliente: PADARIA TESTE",
+        "Conta: 0239 / 003 / 00001234-5", "Mês: Janeiro/2021", "Período: 1 - 31", "Extrato",
+        "Data Mov. Nr. Doc. Histórico Valor Saldo",
+        "000000 SALDO ANTERIOR 0,00 100,00 D",
+        "04/01/2021 000000 DEB.IOF 10,00 D 110,00 D",
+        "05/01/2021 251779 CIEL MS CD 500,00 C 390,00 C",
+        "06/01/2021 217097 DB SALARIO 1.000,00 D 610,00 D",
+        "Lançamentos do Dia",
+        "Data Mov. Nr. Doc. Histórico Valor Saldo",
+        "01/02/2021 000000 CR VD CART 10,00 C 600,00 D",
+    ]
+    for i, l in enumerate(linhas):
+        doc.texto(40, 40 + i * 14, l, 9)
+    return doc.gerar()
+
+
+def test_extrato_caixa_organizado(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_extrato_caixa()), "CAIXA.pdf")},
+                    content_type="multipart/form-data")
+    wb = load_workbook(BytesIO(r.data))
+    assert wb.sheetnames == ["Resumo", "Extrato", "Últimos lançamentos"]
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "PADARIA TESTE — Caixa ag. 0239 c/c 003/00001234-5"
+    assert ext["H5"].value == -100  # saldo devedor (D) fica negativo
+    linhas = [tuple(c.value for c in ext[r][1:9]) for r in range(6, 9)]
+    assert linhas == [
+        ("DEB.IOF", None, None, "Juros/IOF", None, 10, "=H5+F6-G6", -110),
+        ("CIEL MS CD", "251779", "Cielo · Maestro (débito)", "Recebíveis de cartão", 500, None, "=H6+F7-G7", 390),
+        ("DB SALARIO", "217097", None, "Salários", None, 1000, "=H7+F8-G8", -610),
+    ]
+    assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [-100, None, None, -610]
+    ult = wb["Últimos lançamentos"]
+    assert ult["H5"].value == -610 and ult["B6"].value == "CR VD CART" and ult["I6"].value == -600

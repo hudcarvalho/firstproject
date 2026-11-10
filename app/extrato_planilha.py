@@ -21,7 +21,7 @@ TIPOS = [
     "Aplicação em CDB", "Resgate de CDB", "Recebimento PIX/TED", "Recebimento Sispag",
     "Cobrança (títulos liquidados)", "Recebíveis de cartão", "Repasses recebidos", "Transações recebidas", "Boletos recebidos",
     "Depósitos", "Transferência recebida", "Resgate de aplicação", "Consórcio", "Aplicação financeira",
-    "Tributos/guias", "Transferência CC Itaú", "Transferência entre contas", "PIX enviado",
+    "Tributos/guias", "Salários", "Transferência CC Itaú", "Transferência entre contas", "PIX enviado",
     "TED/DOC enviado", "Pagamento Sispag", "Débito automático", "Transações debitadas (Stone)",
     "Boletos/contas pagas",
     "Cartão de crédito", "Compras no cartão de débito", "Tarifas bancárias", "Juros/IOF", "Seguros", "Rendimento aplicação automática",
