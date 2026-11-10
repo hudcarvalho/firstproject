@@ -31,6 +31,9 @@ def test_menu_e_cabecalho(client, empresas):
     assert html.index("CHAVEIRO ITALIA LTDA") < html.index("EXATA CONTABIL")
     assert "INATIVA LTDA" not in html
     assert "45.997.418/0001-53" in html and "LUCRO PRESUMIDO" in html
+    for c in ("defis", "ecd", "ecf", "ibge", "observacao"):
+        assert f'class="form-select form-select-sm filtro-campo" data-campo="{c}"' in html
+    assert ">Em branco</option>" in html and ">Preenchidos</option>" in html
 
 
 def test_salvar_celulas(client, app, empresas):
