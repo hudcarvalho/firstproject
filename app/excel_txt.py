@@ -4,7 +4,7 @@
     sequência,data,débito,crédito,valor,código,histórico,,participante
 
 Ex.: 1,02/01/2026,571,858,22.84,1006,IOF,,0
-O valor sai sem separador de milhar e com ponto decimal (700 · 22.84 · 2658); vírgula no histórico
+O valor sai sem sinal (negativo vira positivo), sem milhar e com ponto decimal (700 · 22.84 · 2658); vírgula no histórico
 vira ponto (a vírgula separa os campos); participante vazio vira 0; linhas terminam em CRLF (padrão Windows dos sistemas contábeis).
 """
 import re
