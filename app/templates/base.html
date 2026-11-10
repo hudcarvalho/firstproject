@@ -41,6 +41,7 @@
           <a class="nav-link dropdown-toggle {{ 'active' if ep.startswith('ferramentas.') }}" href="#" data-bs-toggle="dropdown">Ferramentas</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('ferramentas.pdf_excel') }}">Converter PDF em Excel</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('ferramentas.excel_txt') }}">Converter Excel em TXT</a></li>
           </ul>
         </li>
         {% if current_user.admin %}
