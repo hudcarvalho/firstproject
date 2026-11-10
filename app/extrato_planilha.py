@@ -73,7 +73,9 @@ class Extrato:
     movimentos: list = field(default_factory=list)
     cdbs: list = field(default_factory=list)  # dicts (Itaú)
     total_cdb: tuple | None = None
-    saldos_invest: list = field(default_factory=list)  # [(data, histórico, valor)] (Bradesco)
+    saldos_invest: list = field(default_factory=list)  # [(data, histórico, valor)] (Bradesco, Safra)
+    titulo_invest: str = "Invest Fácil"
+    descricao_invest: str = "Saldo diário da aplicação automática informado pelo banco (separado do saldo da conta corrente)."
     ultimos: list = field(default_factory=list)  # lançamentos posteriores ao período
     ultimos_saldo_anterior: Decimal | None = None
     ultimos_data_anterior: date | None = None
@@ -269,10 +271,10 @@ def planilha(ex):
 
     # ---- Saldos diários de investimento automático (Bradesco Invest Fácil)
     if ex.saldos_invest:
-        inv = wb.create_sheet("Invest Fácil")
-        inv["A1"] = "Saldos Invest Fácil / Plus"
+        inv = wb.create_sheet(ex.titulo_invest[:31])
+        inv["A1"] = "Saldos Invest Fácil / Plus" if ex.titulo_invest == "Invest Fácil" else f"Saldos {ex.titulo_invest}"
         inv["A1"].font = Font(bold=True, size=12)
-        inv["A2"] = "Saldo diário da aplicação automática informado pelo banco (separado do saldo da conta corrente)."
+        inv["A2"] = ex.descricao_invest
         inv["A2"].font = Font(size=9)
         cabecalho(inv, 4, ["Data", "Histórico", "Valor (R$)"])
         r = 4

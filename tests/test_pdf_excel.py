@@ -475,3 +475,221 @@ def test_extrato_itau_lancamentos_conta(client):
         ("SISPAG CLIENTE BOM", "CLIENTE BOM", "Recebimento Sispag", 99.5, 1000),
     ]
     assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [1000, None, None, 1000]
+
+
+def _converte(client, pdf, nome):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(pdf), nome)},
+                    content_type="multipart/form-data")
+    assert r.status_code == 200
+    return load_workbook(BytesIO(r.data))
+
+
+def _linhas(ws, inicio, fim, colunas=9):
+    return [tuple(c.value for c in ws[r][1:colunas]) for r in range(inicio, fim)]
+
+
+def _pdf_bb():
+    """Banco do Brasil, "Consultas - Extrato de conta corrente", dados fictícios."""
+    doc = Documento("Extrato")
+    linhas = [
+        "Consultas - Extrato de conta corrente", "Cliente - Conta atual", "Agência 1234-5",
+        "Conta corrente 9999-1PADARIA TESTE", "Período do extrato de 01 / 09 / 2026 até 30 / 09 / 2026", "Lançamentos",
+        "Dt. balancete Dt. movimento Ag. origem Lote Histórico Documento Valor R$ Saldo",
+        "31/08/2026 0000 00000000 Saldo Anterior 100,00 C",
+        "01/09/2026 0000 14397821 Pix - Recebido 10.804.407 50,00 C",
+        "01/09 08:04 04553969000140 CLIENTE BOM",
+        "01/09/2026 0000 13105 Tarifa Pacote Serviços 30,00 D 120,00 C",
+        "02/09/2026 0000 14020 Brasilprev 20,00 D 100,00 C",
+        "BRASILPREV SEGUROS",
+        "30/09/2026 0000 00000000 S A L D O 100,00 C",
+        "------------------------------------------------",
+    ]
+    for i, l in enumerate(linhas):
+        doc.texto(40, 40 + i * 14, l, 9)
+    return doc.gerar()
+
+
+def test_extrato_bb_organizado(client):
+    wb = _converte(client, _pdf_bb(), "BB.pdf")
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "PADARIA TESTE — Banco do Brasil ag. 1234-5 c/c 9999-1"
+    linhas = [(l[0], l[2], l[3], l[4], l[5], l[7]) for l in _linhas(ext, 6, 9)]
+    assert linhas == [
+        ("Pix - Recebido", "04553969000140 CLIENTE BOM", "Recebimento PIX/TED", 50, None, None),
+        ("Tarifa Pacote Serviços", None, "Tarifas bancárias", None, 30, 120),
+        ("Brasilprev", "BRASILPREV SEGUROS", "Seguros", None, 20, 100),
+    ]
+    assert [wb["Resumo"].cell(i, 3).value for i in (4, 7)] == [100, 100]
+
+
+def _pdf_c6():
+    """C6 Bank exportado pelo app, dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(40, 40, "Extrato exportado no dia 11 de maio de 2026 às 12:04", 9)
+    t(40, 56, "LOJA C6 LTDA • 11.222.333/0001-81", 9)
+    t(40, 70, "Agência: 1 • Conta: 12345678", 9)
+    t(40, 84, "Extrato Período • 1 de abril de 2026 até 30 de abril de 2026", 9)
+    t(40, 100, "Abril 2026 ( 01/04/2026 - 30/04/2026 ) Entradas: R$ 1.000,00 • Saídas: R$ 300,00", 9)
+    for x, s in ((150, "Tipo"), (260, "Descrição"), (520, "Valor")):
+        t(x, 120, s, 9)
+    y = 140
+    for l in (("01/04", "01/04", "Entrada PIX", "Pix recebido de CLIENTE BOM", "R$ 1.000,00"),
+              ("02/04", "02/04", "Pagamento", "SIMPLES NACIONAL", "-R$ 300,00"), ("02/04/26", "1.200,00")):
+        if len(l) == 2:
+            t(40, y, f"Saldo do dia {l[0]} R$ {l[1]}", 9)
+        else:
+            t(40, y, l[0], 9)
+            t(80, y, l[1], 9)
+            t(150, y, l[2], 9)
+            t(260, y, l[3], 9)
+            t(560, y, l[4], 9, alinhar="direita")
+        y += 16
+    return doc.gerar()
+
+
+def test_extrato_c6_organizado(client):
+    wb = _converte(client, _pdf_c6(), "C6.pdf")
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "LOJA C6 LTDA — C6 Bank ag. 1 c/c 12345678"
+    assert ext["G5"].value == 500  # saldo anterior deduzido do primeiro saldo do dia
+    linhas = [(l[0], l[1], l[2], l[3], l[4], l[6]) for l in _linhas(ext, 6, 8)]
+    assert linhas == [("Entrada PIX", "CLIENTE BOM", "Recebimento PIX/TED", 1000, None, None),
+                      ("Pagamento", "SIMPLES NACIONAL", "Tributos/guias", None, 300, 1200)]
+    assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [500, 1000, 300, 1200]
+
+
+def _pdf_safra():
+    """Banco Safra, "Extrato de Movimentação" (dias do mais novo ao mais antigo), dados fictícios."""
+    doc = Documento("Extrato")
+    linhas = [
+        "Banco Safra S/A Página 1 de 1", "Extrato de Movimentação PANIFICADORA TESTE",
+        "CNPJ: 011.222.333 | AG: 0016 | CONTA: 00123456-7", "Período de 01/07/2026 a 31/07/2026",
+        "LANÇAMENTOS REALIZADOS", "Data Lançamento Quantidade Valor (R$)",
+        "02/07 PIX RECEBIDO 3 300,00", "02/07 DEPOSITO EM POUPANCA 1 -300,00", "02/07 CONTA CORRENTE 0 0,00",
+        "02/07 SALDO POUPANCA PLUS 0 300,00",
+        "01/07 DEBITO ALUGUEL POS/TEF SAFRAPAY 1 -50,00", "01/07 CREDITO DE POUPANCA 1 50,00",
+        "01/07 CONTA CORRENTE 0 0,00",
+    ]
+    for i, l in enumerate(linhas):
+        doc.texto(40, 40 + i * 14, l, 9)
+    return doc.gerar()
+
+
+def test_extrato_safra_organizado(client):
+    wb = _converte(client, _pdf_safra(), "SAFRA.pdf")
+    assert wb.sheetnames == ["Resumo", "Extrato", "Poupança Plus"]
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "PANIFICADORA TESTE — Safra ag. 0016 c/c 00123456-7"
+    rows = [tuple(c.value for c in ext[r][:8]) for r in range(6, 10)]
+    assert [(r[0].strftime("%d/%m"), r[1], r[2], r[3], r[4], r[5], r[7]) for r in rows] == [
+        ("01/07", "DEBITO ALUGUEL POS/TEF SAFRAPAY", None, "Tarifas bancárias", None, 50, None),
+        ("01/07", "CREDITO DE POUPANCA", None, "Resgate de aplicação", 50, None, 0),
+        ("02/07", "PIX RECEBIDO", "3 lançamentos", "Recebimento PIX/TED", 300, None, None),
+        ("02/07", "DEPOSITO EM POUPANCA", None, "Aplicação financeira", None, 300, 0),
+    ]
+
+
+def _pdf_nubank():
+    """Nubank PJ: dias com totais de entradas e saídas e saldo do dia, dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(40, 40, "LOJA NU LTDA", 9)
+    t(40, 54, "CNPJ 11.222.333/0001-81 Agência 0001 Conta", 9)
+    t(40, 68, "1234567-8", 9)
+    t(40, 82, "01 DE JANEIRO DE 2026 a 31 DE JANEIRO DE 2026 VALORES EM R$", 9)
+    for i, (rot, v) in enumerate((("Saldo inicial", "1.000,00"), ("Rendimento líquido", "+0,02"),
+                                  ("Total de entradas", "+500,00"), ("Total de saídas", "-200,00"),
+                                  ("Saldo final do período", "1.300,02"))):
+        t(40, 100 + i * 14, f"{rot} {v}", 9)
+    t(40, 180, "Movimentações", 9)
+    y = 200
+    for l in (("05 JAN 2026", "Total de entradas", "+ 500,00"), ("Transferência recebida pelo Pix", "CLIENTE BOM -", "500,00"),
+              ("", "BCO TESTE Agência: 1 Conta: 2", ""),
+              ("", "Total de saídas", "- 200,00"), ("Pagamento de boleto efetuado", "FORNECEDOR X", "200,00"),
+              ("", "Saldo do dia", "1.300,00")):
+        if l[0] and l[1].startswith("Total"):
+            t(40, y, l[0], 9)
+            t(130, y, l[1], 9)
+        elif l[1].startswith(("Total", "Saldo do dia")):
+            t(130, y, l[1], 9)
+        else:
+            if l[0]:
+                t(130, y, l[0], 9)
+            t(260, y, l[1], 9)
+        if l[2]:
+            t(560, y, l[2].replace("+ ", "+").replace("- ", "-") if not l[1].startswith("Total") else l[2], 9,
+              alinhar="direita")
+        y += 14
+    t(40, y + 20, "Tem alguma dúvida? Fale com a gente", 9)
+    return doc.gerar()
+
+
+def test_extrato_nubank_organizado(client):
+    wb = _converte(client, _pdf_nubank(), "NUBANK.pdf")
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "LOJA NU LTDA — Nubank ag. 0001 c/c 1234567-8"
+    rows = [tuple(c.value for c in ext[r][1:8]) for r in range(6, 9)]
+    assert [(r[0], r[1], r[2], r[3], r[4], r[6]) for r in rows] == [
+        ("Transferência recebida pelo Pix", "CLIENTE BOM · BCO TESTE Agência: 1 Conta: 2", "Recebimento PIX/TED", 500,
+         None, None),
+        ("Pagamento de boleto efetuado", "FORNECEDOR X", "Boletos/contas pagas", None, 200, 1300),
+        ("Rendimento líquido do período (resumo do Nubank)", None, "Rendimento aplicação automática", 0.02, None,
+         1300.02),
+    ]
+    assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [1000, 500.02, 200, 1300.02]
+
+
+def _pdf_bmp():
+    """BMP "Extrato Geral" (dias do mais novo ao mais antigo), dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(40, 40, "LOJA BMP LTDA", 9)
+    t(40, 54, "BANCO 274 | AGÊNCIA 0001-8 | CONTA 123456-7", 9)
+    doc.nova_pagina()
+    t(40, 40, "Extrato Geral", 9)
+    t(40, 54, "Razão Social: LOJA BMP Agência: 0001-8 Período: 01/09/2026 a 02/09/2026", 9)
+    t(40, 68, "MOVIMENTAÇÕES", 9)
+
+    def cabecalho(y):
+        for x, s in ((29, "Hora"), (70, "Tipo"), (160, "Identificação"), (430, "Movimentações"), (500, "(R$)"),
+                     (530, "Observações")):
+            t(x, y, s, 8)
+
+    def lanc(y, data, hora, tipo1, tipo2, ident, sinal, v, extra=()):
+        t(29, y, data, 8)
+        t(70, y, tipo1, 8)
+        t(160, y, ident, 8)
+        t(440, y, f"{sinal} R$ {v}", 8)
+        t(530, y, "-", 8)
+        t(29, y + 9, hora, 8)
+        if tipo2:
+            t(70, y + 9, tipo2, 8)
+        for i, e in enumerate(extra):
+            t(160, y + 9 + i * 9, e, 8)
+
+    t(40, 90, "02/09/2026 quarta-feira Saldo inicial do dia R$ 1.499,70", 8)
+    cabecalho(104)
+    lanc(118, "02/09/26", "09h00", "ENVIO PIX", "", "FORNECEDOR X", "-", "499,70", ("ID Transação: 3",))
+    t(40, 150, "Saldo final do dia R$ 1.000,00", 8)
+    t(40, 170, "01/09/2026 terça-feira Saldo inicial do dia R$ 1.000,00", 8)
+    cabecalho(184)
+    lanc(198, "01/09/26", "08h01", "CUSTO", "RECEBIMENTO PIX", "-", "-", "0,30", ("ID Transação: 2",))
+    lanc(226, "01/09/26", "08h00", "RECEBIMENTO PIX", "", "CLIENTE BOM", "+", "500,00",
+         ("DOC: **.***.333/***1-81", "ID Transação: 1"))
+    t(40, 262, "Saldo final do dia R$ 1.499,70", 8)
+    return doc.gerar()
+
+
+def test_extrato_bmp_organizado(client):
+    wb = _converte(client, _pdf_bmp(), "BMP.pdf")
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "LOJA BMP LTDA — BMP ag. 0001-8 c/c 123456-7"
+    rows = [tuple(c.value for c in ext[r][:9]) for r in range(6, 9)]
+    assert [(r[0].strftime("%d/%m"),) + r[1:7] + r[8:] for r in rows] == [
+        ("01/09", "RECEBIMENTO PIX (08h00)", "1", "CLIENTE BOM · **.***.333/***1-81", "Recebimento PIX/TED", 500, None,
+         None),
+        ("01/09", "CUSTO RECEBIMENTO PIX (08h01)", "2", None, "Tarifas bancárias", None, 0.3, 1499.7),
+        ("02/09", "ENVIO PIX (09h00)", "3", "FORNECEDOR X", "PIX enviado", None, 499.7, 1000),
+    ]
+    assert [wb["Resumo"].cell(i, 3).value for i in (4, 7)] == [1000, 1000]

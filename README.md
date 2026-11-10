@@ -106,6 +106,12 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   C/D (D = devedor, negativo), conferência linha a linha, adquirente e bandeira dos recebimentos de
   cartão por extenso (ex.: "CIEL MS CD" → "Cielo · Maestro (débito)") e os "Lançamentos do Dia" em
   aba própria.
+  Também são reconhecidos o **Banco do Brasil** (extrato de conta corrente, com o favorecido da
+  linha de detalhe), o **C6 Bank** (exportado pelo app, conferido com o saldo do dia), o **Nubank PJ**
+  (totais por dia e saldo do dia; o rendimento líquido do resumo vira um lançamento no fim do
+  período), o **Safra** (lançamentos agrupados por dia, do mais novo ao mais antigo, com os saldos da
+  Poupança Plus em aba própria) e o **BMP** (Extrato Geral, com tipo, favorecido/DOC e ID da
+  transação). PDFs com estrutura danificada são regravados automaticamente antes da leitura.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o
