@@ -100,6 +100,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   (Data, Lançamentos, Razão Social, CNPJ/CPF, Valor, Saldo): textos quebrados em até três linhas são
   remontados, a razão social e o CNPJ/CPF viram o favorecido e a conferência usa o "SALDO TOTAL
   DISPONÍVEL DIA" de cada dia.
+  O **extrato por período da Caixa** (Internet Banking) também é reconhecido: valores e saldos com
+  C/D (D = devedor, negativo), conferência linha a linha, adquirente e bandeira dos recebimentos de
+  cartão por extenso (ex.: "CIEL MS CD" → "Cielo · Maestro (débito)") e os "Lançamentos do Dia" em
+  aba própria.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o
