@@ -100,6 +100,8 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   (Data, Lançamentos, Razão Social, CNPJ/CPF, Valor, Saldo): textos quebrados em até três linhas são
   remontados, a razão social e o CNPJ/CPF viram o favorecido e a conferência usa o "SALDO TOTAL
   DISPONÍVEL DIA" de cada dia.
+  Também o outro formato do Itaú "lançamentos período" (colunas data | lançamentos | ag/origem |
+  valor | saldo, com datas "02 / set" e linhas de mês), conferido com o saldo total disponível do dia.
   O **extrato por período da Caixa** (Internet Banking) também é reconhecido: valores e saldos com
   C/D (D = devedor, negativo), conferência linha a linha, adquirente e bandeira dos recebimentos de
   cartão por extenso (ex.: "CIEL MS CD" → "Cielo · Maestro (débito)") e os "Lançamentos do Dia" em

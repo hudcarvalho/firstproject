@@ -40,7 +40,8 @@ def _tipo(hist, credito, razao=""):
         return "PIX enviado"
     if h.startswith("PIX") or h.startswith("TED") or h.startswith("DOC"):
         return "Recebimento PIX/TED" if credito else "TED/DOC enviado"
-    if h.startswith("BOLETO PAGO") or h.startswith("PAGTO") or h.startswith("CONCESSIONARIA"):
+    if h.startswith("BOLETO PAGO") or h.startswith("PAGTO") or h.startswith("CONCESSIONARIA") \
+            or h.startswith("SISPAG CONCESSIONARIA"):
         return "Boletos/contas pagas"
     if h.startswith("RECEBIMENTO REDE") or h.startswith("REDE ") or "CIELO" in h or "GETNET" in h:
         return "Recebíveis de cartão"
@@ -80,13 +81,17 @@ def ler(pdf):
     col = None
     palavras1 = pdf.pages[0].extract_words(x_tolerance=1.5, y_tolerance=1)
     for w in palavras1:
-        if w["text"] == "Razão":
+        # só o cabeçalho da tabela (outras partes da página também têm "Valor" e "Saldo")
+        if w["text"] == "Razão" and col is None:
             col = {"razao": w["x0"] - 2, "top": w["top"]}
-        if col and w["text"] == "CNPJ/CPF":
+            continue
+        if not col or abs(w["top"] - col["top"]) > 2:
+            continue
+        if w["text"] == "CNPJ/CPF" and "doc" not in col:
             col["doc"] = w["x0"] - 2
-        if col and w["text"] == "Valor":
+        elif w["text"] == "Valor" and "valor" not in col:
             col["valor"] = w["x1"] + 17
-        if col and w["text"] == "Saldo" and "valor" in col:
+        elif w["text"] == "Saldo" and "valor" in col and "saldo" not in col:
             col["saldo"] = w["x1"] + 17
     if not col or not {"doc", "valor", "saldo"} <= set(col):
         return ex

@@ -422,3 +422,56 @@ def test_extrato_caixa_organizado(client):
     assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [-100, None, None, -610]
     ult = wb["Últimos lançamentos"]
     assert ult["H5"].value == -610 and ult["B6"].value == "CR VD CART" and ult["I6"].value == -600
+
+
+def _pdf_itau_conta():
+    """Itaú "lançamentos período" com datas "02 / set" e linhas de mês, dados fictícios."""
+    doc = Documento("Extrato")
+    t = doc.texto
+    t(31, 144, "LOJA ITAU LTDA", 8)
+    t(298, 144, "agência", 8)
+    t(353, 144, "conta corrente", 8)
+    t(31, 152, "11.222.333/0001-81", 8)
+    t(298, 152, "1234", 8)
+    t(353, 152, "05555-1", 8)
+    t(28, 178, "saldo disponível em conta", 9)
+    t(28, 230, "lançamentos período: 01/09/2026 até 30/09/2026", 9)
+    for x, texto in ((28, "data"), (77, "lançamentos"), (321, "ag/origem"), (400, "valor (R$)"), (519, "saldo (R$)")):
+        t(x, 260, texto, 9)
+    linhas = [("31 / ago", "SALDO ANTERIOR", "", "1.000,00"), None,
+              ("02 / set", "TAR MAXCTA PJ MENS 08/26", "-100,00", ""),
+              ("02 / set", "REND PAGO APLIC AUT MAIS", "0,50", ""),
+              ("02 / set", "SALDO TOTAL DISPON#VEL DIA", "", "900,50"),
+              ("09 / set", "SISPAG CLIENTE BOM", "99,50", ""),
+              ("09 / set", "SALDO TOTAL DISPON#VEL DIA", "", "1.000,00")]
+    y = 279
+    for l in linhas:
+        if l is None:
+            t(28, y, "setembro 2026", 9)
+        else:
+            data, desc, val, saldo = l
+            t(28, y, data, 9)
+            t(77, y, desc, 9)
+            t(435, y, val, 9, alinhar="direita")
+            t(557, y, saldo, 9, alinhar="direita")
+        y += 18
+    t(28, y + 10, "saldo da conta corrente", 9)
+    t(200, y + 28, "descrição valor (R$) saldo (R$)", 9)
+    return doc.gerar()
+
+
+def test_extrato_itau_lancamentos_conta(client):
+    r = client.post("/ferramentas/pdf-excel", data={"arquivo": (BytesIO(_pdf_itau_conta()), "MILEIDE.pdf")},
+                    content_type="multipart/form-data")
+    wb = load_workbook(BytesIO(r.data))
+    ext = wb["Extrato"]
+    assert ext["A1"].value == "LOJA ITAU LTDA — Itaú ag. 1234 c/c 05555-1"
+    assert ext["G5"].value == 1000
+    linhas = [tuple(c.value for c in ext[r][:8]) for r in range(6, 9)]
+    assert [l[0].strftime("%d/%m/%Y") for l in linhas] == ["02/09/2026", "02/09/2026", "09/09/2026"]
+    assert [l[1:5] + l[7:] for l in linhas] == [
+        ("TAR MAXCTA PJ MENS 08/26", None, "Tarifas bancárias", None, None),
+        ("REND PAGO APLIC AUT MAIS", None, "Rendimento aplicação automática", 0.5, 900.5),
+        ("SISPAG CLIENTE BOM", "CLIENTE BOM", "Recebimento Sispag", 99.5, 1000),
+    ]
+    assert [wb["Resumo"].cell(i, 3).value for i in range(4, 8)] == [1000, None, None, 1000]
