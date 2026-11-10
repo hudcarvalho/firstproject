@@ -170,11 +170,13 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
         raise ErroPDF(f"O PDF tem {total} páginas; o limite é {MAX_PAGINAS}. Divida o arquivo e converta por partes.")
 
     if modo == "auto":
-        from . import extrato_bradesco, extrato_caixa, extrato_itau, extrato_itau_periodo, extrato_santander
+        from . import (extrato_bradesco, extrato_caixa, extrato_itau, extrato_itau_conta, extrato_itau_periodo,
+                       extrato_santander)
         from .extrato_planilha import planilha
         leitor = None
         for reconhece, ler in ((extrato_itau.e_extrato_itau, extrato_itau.ler),
                                (extrato_itau_periodo.e_extrato_itau_periodo, extrato_itau_periodo.ler),
+                               (extrato_itau_conta.e_extrato_itau_conta, extrato_itau_conta.ler),
                                (extrato_bradesco.e_extrato_bradesco, extrato_bradesco.ler),
                                (extrato_santander.e_extrato_santander, extrato_santander.ler),
                                (extrato_caixa.e_extrato_caixa, extrato_caixa.ler)):
