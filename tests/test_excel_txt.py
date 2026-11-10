@@ -65,3 +65,15 @@ def test_erros(client):
     r = client.post("/ferramentas/excel-txt", data={"arquivo": (BytesIO(buf.getvalue()), "x.xlsx"), "codigo": "1006"},
                     content_type="multipart/form-data")
     assert "linha 2: valor inválido" in r.get_data(as_text=True)
+
+
+def test_valor_negativo_sai_sem_sinal():
+    from app.excel_txt import converter
+    wb = Workbook()
+    for v in (-22.84, "-700,00", "(1.234,56)", "11,28-", "R$ -5,10"):
+        wb.active.append(["01/02/2026", 10, 20, "TESTE", v, None])
+    buf = BytesIO()
+    wb.save(buf)
+    txt, n = converter(buf.getvalue())
+    assert [l.split(b",")[4] for l in txt.splitlines()] == [b"22.84", b"700", b"1234.56", b"11.28", b"5.1"]
+    assert b"-" not in txt
