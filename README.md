@@ -112,6 +112,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   período), o **Safra** (lançamentos agrupados por dia, do mais novo ao mais antigo, com os saldos da
   Poupança Plus em aba própria) e o **BMP** (Extrato Geral, com tipo, favorecido/DOC e ID da
   transação). PDFs com estrutura danificada são regravados automaticamente antes da leitura.
+- **Converter Excel em TXT** (*Ferramentas → Converter Excel em TXT*): planilha de lançamentos
+  (Data | conta débito | conta crédito | Lançamento | Valor | Participante) vira o TXT de importação
+  `sequência,data,débito,crédito,valor,código,histórico,,participante` (ex.:
+  `1,02/01/2026,571,858,22,84,1006,IOF,,0`), com o código (padrão 1006) editável na tela.
 - **Importação de clientes** (*Cadastros → Importar clientes*, administradores): lê planilhas
   .xls, .xlsx ou .csv com as colunas Código, Nome/Razão social, CNPJ, Regime, Responsável,
   Grupo econômico e Observações. Para empresas já cadastradas, permite manter, atualizar só o

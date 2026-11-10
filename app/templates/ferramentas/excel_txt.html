@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block title %}Converter Excel em TXT{% endblock %}
+{% block content %}
+<h1 class="h3 mb-3">Converter Excel em TXT</h1>
+<form method="post" enctype="multipart/form-data" class="card" style="max-width: 760px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <div class="mb-3">
+      <label class="form-label" for="arquivo">Planilha de lançamentos (.xlsx ou .xls)</label>
+      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".xlsx,.xls" required>
+      <div class="form-text">Colunas na ordem: <strong>Data</strong> | conta débito | conta crédito | <strong>Lançamento</strong> |
+        <strong>Valor</strong> | <strong>Participante</strong> (o cabeçalho é opcional; é lida a primeira aba).
+        O arquivo é convertido na hora e não fica guardado no sistema.</div>
+    </div>
+    <div class="mb-3" style="max-width: 220px">
+      <label class="form-label" for="codigo">Código (6º campo do TXT)</label>
+      <input class="form-control" name="codigo" id="codigo" value="{{ codigo }}" inputmode="numeric" pattern="\d+" required>
+    </div>
+    <div class="form-text">Cada lançamento vira uma linha <code>sequência,data,débito,crédito,valor,código,histórico,,participante</code>,
+      por exemplo <code>1,02/01/2026,571,858,22,84,1006,IOF,,0</code>. Valores sem separador de milhar e com vírgula decimal;
+      participante vazio sai como 0.</div>
+  </div>
+  <div class="card-footer">
+    <button class="btn btn-success">Converter e baixar TXT</button>
+  </div>
+</form>
+{% endblock %}
