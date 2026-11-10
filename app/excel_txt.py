@@ -3,9 +3,9 @@
 
     sequência,data,débito,crédito,valor,código,histórico,,participante
 
-Ex.: 1,02/01/2026,571,858,22,84,1006,IOF,,0
-O valor sai sem separador de milhar e com vírgula decimal (700 · 22,84 · 2658); participante vazio
-vira 0; linhas terminam em CRLF (padrão Windows dos sistemas contábeis).
+Ex.: 1,02/01/2026,571,858,22.84,1006,IOF,,0
+O valor sai sem separador de milhar e com ponto decimal (700 · 22.84 · 2658); vírgula no histórico
+vira ponto (a vírgula separa os campos); participante vazio vira 0; linhas terminam em CRLF (padrão Windows dos sistemas contábeis).
 """
 import re
 import warnings
@@ -80,12 +80,12 @@ def _decimal(v):
 
 
 def formatar_valor(d):
-    """Decimal -> '22,84', '700', '2658', '22,8' (sem milhar, vírgula decimal, sem zeros à direita)."""
+    """Decimal -> '22.84', '700', '2658', '22.8' (sem milhar, ponto decimal, sem zeros à direita)."""
     d = abs(d).quantize(Decimal("0.01"))
     t = f"{d:f}"
     if "." in t:
         t = t.rstrip("0").rstrip(".")
-    return t.replace(".", ",")
+    return t
 
 
 def _colunas(linhas):
@@ -123,9 +123,8 @@ def converter(conteudo, codigo=CODIGO_PADRAO):
         if valor is None:
             erros.append(f"linha {n}: valor inválido ({_texto(cel('valor')) or 'vazio'})")
             continue
-        # vírgula no histórico deslocaria os campos do TXT
-        historico = _texto(cel("historico")).replace(",", " ")
-        historico = re.sub(r"\s+", " ", historico).strip()
+        # a vírgula separa os campos do TXT: no histórico, vira ponto
+        historico = _texto(cel("historico")).replace(",", ".")
         participante = _texto(cel("participante")) or "0"
         saida.append(",".join([str(len(saida) + 1), data, _texto(cel("debito")), _texto(cel("credito")),
                                formatar_valor(valor), codigo, historico, "", participante]))
