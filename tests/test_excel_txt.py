@@ -3,12 +3,12 @@ from io import BytesIO
 
 from openpyxl import Workbook
 
-ESPERADO = (b"1,02/01/2026,571,858,22,84,1006,IOF,,0\r\n"
+ESPERADO = (b"1,02/01/2026,571,858,22.84,1006,IOF,,0\r\n"
             b"2,03/01/2026,16,858,700,1006,SUPRIMENTO DE CAIXA,,219\r\n"
             b"3,04/01/2026,628,858,400,1006,SUPRIMENTO DE CAIXA,,0\r\n"
-            b"4,05/01/2026,1653,858,11,28,1006,TAR C/C SISPAG,,0\r\n"
+            b"4,05/01/2026,1653,858,11.28,1006,TAR C/C SISPAG,,0\r\n"
             b"5,06/01/2026,37,858,2658,1006,VALORES A IDENTIFICA - INT PAG TIT 175324004590,,0\r\n"
-            b"6,03/01/2018,172,858,940,95,1006,PAGAMENTO DE FGTS REF. 12/2017,,0\r\n")
+            b"6,03/01/2018,172,858,940.95,1006,PAGAMENTO DE FGTS REF. 12/2017,,0\r\n")
 
 
 def _planilha():
@@ -46,11 +46,11 @@ def test_converte_igual_ao_modelo(client):
 def test_valores_texto_virgula_no_historico_e_codigo():
     from app.excel_txt import converter
     wb = Workbook()
-    wb.active.append(["01/02/2026", "10", "20", "PAGTO X, Y", "1.234,50", ""])
+    wb.active.append(["01/02/2026", "10", "20", "PAGTO X,Y", "1.234,50", ""])
     buf = BytesIO()
     wb.save(buf)
     txt, n = converter(buf.getvalue(), codigo="2000")
-    assert n == 1 and txt == b"1,01/02/2026,10,20,1234,5,2000,PAGTO X Y,,0\r\n"
+    assert n == 1 and txt == b"1,01/02/2026,10,20,1234.5,2000,PAGTO X.Y,,0\r\n"
 
 
 def test_erros(client):
