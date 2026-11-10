@@ -21,7 +21,11 @@
        data-url="{{ url_for('obrigacoes_anuais.salvar') }}" data-ano="{{ ano }}" data-csrf="{{ csrf_token() }}">
   <thead>
     <tr class="titulos">
-      {% for c in colunas %}<th class="{{ 'text-center' if loop.index in (5, 6, 7, 8) }}">{{ c }}</th>{% endfor %}
+      {% for c in colunas %}
+      {% if loop.index == 1 %}<th class="ordenavel ordem-ativa" data-ordem="codigo" title="Clique para ordenar por código (menor/maior)">{{ c }} <span class="seta">▲</span></th>
+      {% elif loop.index == 2 %}<th class="ordenavel" data-ordem="nome" title="Clique para ordenar por empresa (A–Z / Z–A)">{{ c }} <span class="seta"></span></th>
+      {% else %}<th class="{{ 'text-center' if loop.index in (5, 6, 7, 8) }}">{{ c }}</th>{% endif %}
+      {% endfor %}
     </tr>
     <tr class="filtros">
       <th><input type="search" class="form-control form-control-sm" id="f-codigo" placeholder="Filtrar…" autocomplete="off"></th>
@@ -97,6 +101,35 @@
   [fCod, fNome, fCnpj].forEach(i => i.addEventListener('input', filtrar));
   [fReg, ...fCampos].forEach(s => s.addEventListener('change', filtrar));
   filtrar();
+
+  // ordenação: clique em CÓDIGO ou EMPRESA (de novo inverte)
+  const corpo = tabela.tBodies[0];
+  const cabecalhos = [...tabela.querySelectorAll('th.ordenavel')];
+  const chave = {
+    codigo: tr => { const c = tr.dataset.codigo; return /^\d+$/.test(c) ? [0, Number(c), ''] : [c ? 1 : 2, 0, c]; },
+    nome: tr => [0, 0, tr.dataset.nome],
+  };
+  let ordem = {campo: 'codigo', sentido: 1};
+  function comparar(a, b) {
+    const ka = chave[ordem.campo](a), kb = chave[ordem.campo](b);
+    if (ka[0] !== kb[0]) return ka[0] - kb[0];  // sem código sempre no fim
+    const r = ka[1] - kb[1] || ka[2].localeCompare(kb[2], 'pt-BR');
+    return (r || a.dataset.nome.localeCompare(b.dataset.nome, 'pt-BR')) * ordem.sentido;
+  }
+  function ordenar() {
+    linhas.sort(comparar).forEach(tr => corpo.appendChild(tr));
+    for (const th of cabecalhos) {
+      const ativo = th.dataset.ordem === ordem.campo;
+      th.classList.toggle('ordem-ativa', ativo);
+      th.querySelector('.seta').textContent = ativo ? (ordem.sentido > 0 ? '▲' : '▼') : '';
+    }
+  }
+  for (const th of cabecalhos) {
+    th.addEventListener('click', () => {
+      ordem = {campo: th.dataset.ordem, sentido: ordem.campo === th.dataset.ordem ? -ordem.sentido : 1};
+      ordenar();
+    });
+  }
 
   // salvar célula
   let pendentes = 0;
