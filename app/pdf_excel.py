@@ -12,7 +12,8 @@ from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
 MAX_PAGINAS = 150
-MODOS = {"auto": "Automático (reconhece extratos do Itaú, Bradesco, Santander e Caixa; nos demais, layout da página)",
+MODOS = {"auto": "Automático (reconhece extratos do Itaú, Bradesco, Santander, Caixa, Banco do Brasil, C6, Nubank, "
+                 "Safra e BMP; nos demais, layout da página)",
          "layout": "Layout da página (relatórios, com ou sem bordas)",
          "tabelas": "Somente tabelas com linhas/bordas"}
 
@@ -150,6 +151,25 @@ def _sem_colunas_vazias(linhas):
     return [[l[i] for i in usadas] for l in linhas]
 
 
+def _abrir_pdf(conteudo):
+    """Abre o PDF no pdfplumber; se a estrutura estiver danificada (comum em PDFs gerados por alguns
+    bancos), regrava o arquivo com o pdfium e tenta de novo."""
+    import pdfplumber
+    try:
+        pdf = pdfplumber.open(BytesIO(conteudo))
+        pdf.pages  # noqa: B018 - força a leitura da estrutura
+        return pdf
+    except Exception:
+        import pypdfium2
+        doc = pypdfium2.PdfDocument(conteudo)
+        try:
+            buf = BytesIO()
+            doc.save(buf)
+        finally:
+            doc.close()
+        return pdfplumber.open(BytesIO(buf.getvalue()))
+
+
 def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=True):
     """PDF (bytes) -> (planilha .xlsx em bytes, nº de páginas, nº de linhas).
 
@@ -160,7 +180,7 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
     from openpyxl.styles import Font
 
     try:
-        pdf = pdfplumber.open(BytesIO(conteudo))
+        pdf = _abrir_pdf(conteudo)
         paginas = pdf.pages
         total = len(paginas)
     except Exception as e:  # PDF inválido, corrompido ou protegido por senha
@@ -170,8 +190,8 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
         raise ErroPDF(f"O PDF tem {total} páginas; o limite é {MAX_PAGINAS}. Divida o arquivo e converta por partes.")
 
     if modo == "auto":
-        from . import (extrato_bradesco, extrato_caixa, extrato_itau, extrato_itau_conta, extrato_itau_periodo,
-                       extrato_santander)
+        from . import (extrato_bb, extrato_bmp, extrato_bradesco, extrato_c6, extrato_caixa, extrato_itau,
+                       extrato_itau_conta, extrato_itau_periodo, extrato_nubank, extrato_safra, extrato_santander)
         from .extrato_planilha import planilha
         leitor = None
         for reconhece, ler in ((extrato_itau.e_extrato_itau, extrato_itau.ler),
@@ -179,7 +199,12 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
                                (extrato_itau_conta.e_extrato_itau_conta, extrato_itau_conta.ler),
                                (extrato_bradesco.e_extrato_bradesco, extrato_bradesco.ler),
                                (extrato_santander.e_extrato_santander, extrato_santander.ler),
-                               (extrato_caixa.e_extrato_caixa, extrato_caixa.ler)):
+                               (extrato_caixa.e_extrato_caixa, extrato_caixa.ler),
+                               (extrato_bb.e_extrato_bb, extrato_bb.ler),
+                               (extrato_c6.e_extrato_c6, extrato_c6.ler),
+                               (extrato_nubank.e_extrato_nubank, extrato_nubank.ler),
+                               (extrato_safra.e_extrato_safra, extrato_safra.ler),
+                               (extrato_bmp.e_extrato_bmp, extrato_bmp.ler)):
             try:
                 if reconhece(pdf):
                     leitor = ler
@@ -193,7 +218,7 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
                 pdf.close()
             if ex.movimentos:
                 return planilha(ex), total, len(ex.movimentos)
-            pdf = pdfplumber.open(BytesIO(conteudo))
+            pdf = _abrir_pdf(conteudo)
             paginas = pdf.pages
     extrair = _linhas_por_tabelas if modo == "tabelas" else _linhas_por_texto
     wb = Workbook()
