@@ -397,6 +397,25 @@ class LalurLancamento(db.Model):
     apuracao = db.relationship("LalurApuracao", back_populates="lancamentos")
 
 
+class ObrigacaoAnual(db.Model):
+    """Aba Obrigações: datas de entrega das obrigações anuais (DEFIS, ECD, ECF, IBGE) por ano."""
+
+    CAMPOS_DATA = ("defis", "ecd", "ecf", "ibge")
+
+    id = db.Column(db.Integer, primary_key=True)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"), nullable=False)
+    ano = db.Column(db.Integer, nullable=False)
+    defis = db.Column(db.Date)
+    ecd = db.Column(db.Date)
+    ecf = db.Column(db.Date)
+    ibge = db.Column(db.Date)
+    observacao = db.Column(db.String(255))
+
+    empresa = db.relationship("Empresa")
+
+    __table_args__ = (db.UniqueConstraint("empresa_id", "ano"),)
+
+
 class Usuario(UserMixin, db.Model):
     """Quem acessa o sistema. Pode estar ligado a um Responsável ("minhas empresas")."""
 

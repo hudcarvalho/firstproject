@@ -112,6 +112,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   período), o **Safra** (lançamentos agrupados por dia, do mais novo ao mais antigo, com os saldos da
   Poupança Plus em aba própria) e o **BMP** (Extrato Geral, com tipo, favorecido/DOC e ID da
   transação). PDFs com estrutura danificada são regravados automaticamente antes da leitura.
+- **Obrigações** (menu ao lado de Clientes): todos os clientes ativos em formato de planilha
+  (CÓDIGO, EMPRESA, CNPJ, TRIBUTAÇÃO, DEFIS, ECD, ECF, IBGE, OBSERVAÇÃO), por ano. As datas e a
+  observação são digitadas direto na tabela e salvas ao sair do campo; filtros por código, nome,
+  CNPJ e tributação e exportação em Excel no mesmo formato.
 - **Converter Excel em TXT** (*Ferramentas → Converter Excel em TXT*): planilha de lançamentos
   (Data | conta débito | conta crédito | Lançamento | Valor | Participante) vira o TXT de importação
   `sequência,data,débito,crédito,valor,código,histórico,,participante` (ex.:
