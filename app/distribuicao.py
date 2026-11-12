@@ -327,3 +327,128 @@ def exportar():
         clientes=len({e.id for _, _, e in lancamentos}),
         total=sum((d.valor for d, _, _ in lancamentos), Decimal("0")),
     )
+
+
+def _quebrar(texto, larg, tamanho, negrito=False):
+    """Quebra o texto em linhas que caibam na largura (por palavras)."""
+    from .pdf_simples import largura
+
+    linhas, atual = [], ""
+    for palavra in texto.split():
+        tentativa = f"{atual} {palavra}".strip()
+        if atual and largura(tentativa, tamanho, negrito) > larg:
+            linhas.append(atual)
+            atual = palavra
+        else:
+            atual = tentativa
+    return linhas + ([atual] if atual else [])
+
+
+def _pdf_grade(empresa, ano, linhas, totais_mes, total_geral):
+    """Grade "Lucros distribuídos (R$)" da tela, em A4 paisagem."""
+    from .pdf_simples import A4, Documento
+
+    doc = Documento(f"Distribuição de lucros {ano} - {empresa.razao_social}", tamanho=(A4[1], A4[0]))
+    m = 20
+    larg = doc.largura_pagina - 2 * m
+    w_socio, w_total = 122, 68
+    w_mes = (larg - w_socio - w_total) / 12
+    larguras = [w_socio] + [w_mes] * 12 + [w_total]
+    alt_cab, fonte = 20, 7.5
+    borda, cinza_cab = 0.82, 0.95
+    pagina = [0]
+
+    def grade_vertical(y0, y1):
+        x = m
+        for w in larguras:
+            doc.linha(x, y0, x, y1, 0.4, borda)
+            x += w
+        doc.linha(m + larg, y0, m + larg, y1, 0.4, borda)
+
+    def caixa(x, y, w, h):
+        """Contorno da caixinha de valor (como o campo da tela)."""
+        for x1, y1, x2, y2 in ((x, y, x + w, y), (x, y + h, x + w, y + h), (x, y, x, y + h), (x + w, y, x + w, y + h)):
+            doc.linha(x1, y1, x2, y2, 0.5, 0.78)
+
+    def topo():
+        pagina[0] += 1
+        doc.texto(m, 28, empresa.razao_social, 11, negrito=True)
+        doc.texto(m, 41, f"CNPJ {empresa.cnpj_formatado}", 8, cinza=0.4)
+        y = 52
+        doc.faixa(m, y, larg, 24, 0.975)
+        doc.linha(m, y, m + larg, y, 0.4, borda)
+        doc.texto(m + 8, y + 15.5, "Lucros distribuídos (R$)", 9.5, negrito=True)
+        doc.texto(m + larg - 8, y + 15.5, str(ano), 9.5, negrito=True, alinhar="direita")
+        y += 24
+        doc.faixa(m, y, larg, alt_cab, cinza_cab)
+        doc.linha(m, y, m + larg, y, 0.4, borda)
+        x = m
+        for i, (rotulo, w) in enumerate(zip(["Sócio"] + MESES + ["Total"], larguras)):
+            if i == 0:
+                doc.texto(x + 4, y + 13.5, rotulo, 8.5, negrito=True)
+            elif i == 13:
+                doc.texto(x + w - 4, y + 13.5, rotulo, 8.5, negrito=True, alinhar="direita")
+            else:
+                doc.texto(x + w / 2, y + 13.5, rotulo, 8.5, negrito=True, alinhar="centro")
+            x += w
+        grade_vertical(y, y + alt_cab)
+        doc.linha(m, y + alt_cab, m + larg, y + alt_cab, 0.6, 0.6)
+        doc.texto(m, doc.altura_pagina - 14, f"Emitido em {date.today():%d/%m/%Y} pelo Controle de Rotina", 7,
+                  cinza=0.45)
+        doc.texto(m + larg, doc.altura_pagina - 14, f"Página {pagina[0]}", 7, alinhar="direita", cinza=0.45)
+        return y + alt_cab
+
+    def celulas_valores(y, h, valores, total, negrito=False):
+        x = m + w_socio
+        for v in valores:
+            if not negrito:
+                caixa(x + 3.5, y + h / 2 - 7.5, w_mes - 7, 15)
+            doc.texto(x + w_mes - 7, y + h / 2 + 2.6, fmt_valor(v or Decimal("0")), fonte, negrito=negrito,
+                      alinhar="direita")
+            x += w_mes
+        doc.faixa(x + 0.3, y + 0.3, w_total - 0.6, h - 0.6, 0.955)
+        doc.texto(x + w_total - 4, y + h / 2 + 2.8, fmt_valor(total), 8, negrito=True, alinhar="direita")
+
+    y = topo()
+    limite = doc.altura_pagina - 26
+    for l in linhas:
+        s = l["socio"]
+        nome = _quebrar(s.nome + ("" if s.ativo else " (inativo)"), w_socio - 8, 8)
+        h = max(30, 8 + 10 * len(nome) + 10)
+        if y + h > limite:
+            doc.nova_pagina()
+            y = topo()
+        for i, t in enumerate(nome):
+            doc.texto(m + 4, y + 11 + i * 10, t, 8)
+        doc.texto(m + 4, y + 11 + len(nome) * 10, fmt_documento(s.documento), 6.5, cinza=0.42)
+        celulas_valores(y, h, l["meses"], l["total"])
+        grade_vertical(y, y + h)
+        doc.linha(m, y + h, m + larg, y + h, 0.4, borda)
+        y += h
+    h = 20
+    if y + h > limite:
+        doc.nova_pagina()
+        y = topo()
+    doc.faixa(m, y, larg, h, cinza_cab)
+    doc.linha(m, y, m + larg, y, 0.6, 0.6)
+    doc.texto(m + 4, y + 13.5, "Total", 8.5, negrito=True)
+    celulas_valores(y, h, totais_mes, total_geral, negrito=True)
+    grade_vertical(y, y + h)
+    doc.linha(m, y + h, m + larg, y + h, 0.4, borda)
+    return doc.gerar()
+
+
+@bp.route("/<int:id>/pdf")
+def empresa_pdf(id):
+    """A grade de lucros distribuídos do ano em PDF, igual à tela."""
+    from flask import Response
+
+    empresa = _empresa(id)
+    ano = _ano()
+    linhas, totais_mes, total_geral = _grade(empresa, ano)
+    if not linhas:
+        flash("Cadastre ao menos um sócio ativo para exportar.", "warning")
+        return redirect(url_for("distribuicao.empresa", id=id, ano=ano))
+    nome = f"distribuicao_lucros_{ano}_{empresa.codigo or empresa.id}.pdf"
+    return Response(_pdf_grade(empresa, ano, linhas, totais_mes, total_geral), mimetype="application/pdf",
+                    headers={"Content-Disposition": f'attachment; filename="{nome}"'})
