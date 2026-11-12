@@ -1,4 +1,5 @@
 from decimal import Decimal
+from io import BytesIO
 
 import pytest
 
@@ -217,3 +218,30 @@ def test_exportar_excel(client, app, empresas):
     # sem lançamentos: volta à tela com aviso
     r = client.get("/distribuicao/exportar?ano=2025&baixar=1", follow_redirects=True)
     assert "Nenhuma distribuição lançada" in r.get_data(as_text=True)
+
+
+def test_exportar_pdf_da_grade(client, app, empresas):
+    from decimal import Decimal as D
+
+    import pdfplumber
+
+    from app.models import DistribuicaoLucro, Socio
+    a, b = empresas
+    assert client.get(f"/distribuicao/{a}/pdf?ano=2026").status_code == 302  # sem sócios
+    with app.app_context():
+        s1 = Socio(empresa_id=a, nome="MARIA DE TESTE ALBUQUERQUE DA SILVA", documento="52998224725")
+        s2 = Socio(empresa_id=a, nome="JOAO TESTE", documento="11144477735")
+        db.session.add_all([s1, s2])
+        db.session.flush()
+        db.session.add_all([DistribuicaoLucro(socio_id=s1.id, ano=2026, mes=1, valor=D("50000")),
+                            DistribuicaoLucro(socio_id=s1.id, ano=2026, mes=5, valor=D("20000")),
+                            DistribuicaoLucro(socio_id=s2.id, ano=2026, mes=1, valor=D("17567.12"))])
+        db.session.commit()
+    assert f'href="/distribuicao/{a}/pdf?ano=2026">Exportar PDF</a>' in client.get(
+        f"/distribuicao/{a}?ano=2026").get_data(as_text=True)
+    r = client.get(f"/distribuicao/{a}/pdf?ano=2026")
+    assert r.mimetype == "application/pdf" and "distribuicao_lucros_2026_29.pdf" in r.headers["Content-Disposition"]
+    texto = pdfplumber.open(BytesIO(r.data)).pages[0].extract_text()
+    for trecho in ("Lucros distribuídos (R$)", "2026", "Sócio Jan Fev Mar Abr Mai Jun Jul Ago Set Out Nov Dez Total",
+                   "529.982.247-25", "70.000,00", "17.567,12", "87.567,12", "67.567,12", "20.000,00"):
+        assert trecho in texto, trecho
