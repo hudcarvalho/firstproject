@@ -224,9 +224,10 @@ def empresa(id):
     calc, _ = demonstrativos(empresa)
     existentes = {a.periodo: a for a in LalurApuracao.query.filter_by(empresa_id=empresa.id, ano=ano)}
     colunas = [{"periodo": p, "rotulo": rotulo_periodo(p, curto=True),
-                "apuracao": existentes.get(p), "d": calc.get((ano, p))} for p in periodos]
+                "apuracao": existentes.get(p), "d": calc.get((ano, p)),
+                "valores": valores_das_quotas(calc.get((ano, p)))} for p in periodos]
     abertura = LalurSaldoInicial.query.filter_by(empresa_id=empresa.id).first()
-    return render_template("lalur/empresa.html", empresa=empresa, ano=ano, modo=modo,
+    return render_template("lalur/empresa.html", empresa=empresa, ano=ano, modo=modo, opcoes_quotas=OPCOES_QUOTAS,
                            modo_fixo=modo_fixo, colunas=colunas, abertura=abertura, linhas=LINHAS,
                            apurados=[c for c in colunas if c["d"]])
 
@@ -1023,6 +1024,23 @@ def quotas_do_cliente(apuracao):
     return lista
 
 
+def valores_das_quotas(d):
+    """{número da quota: (IRPJ, CSLL, total)} pelas quotas informadas na apuração, com a mesma divisão
+    da guia DARF (nenhuma quota menor que R$ 1.000,00). Valores sem os juros da 2ª e 3ª quotas."""
+    from . import guia_darf
+
+    if d is None or not d.apuracao.quotas:
+        return {}
+    a = d.apuracao
+    valores = {}
+    for i, valor in enumerate((d.irpj_a_pagar, d.csll_a_pagar)):
+        lista, _ = guia_darf.quotas(valor, a.ano, a.periodo, a.quotas)
+        for q in lista:
+            par = valores.setdefault(q.numero, [ZERO, ZERO])
+            par[i] = q.principal
+    return {n: (irpj, csll, irpj + csll) for n, (irpj, csll) in sorted(valores.items())}
+
+
 def definir_quotas(apuracao, valor):
     """valor: '', '1', '2' ou '3'. Apaga envios de quotas que deixaram de existir."""
     try:
@@ -1131,7 +1149,8 @@ def quotas():
             continue
         if a.empresa_id not in calculos:
             calculos[a.empresa_id] = demonstrativos(a.empresa)[0]
-        linhas.append({"apuracao": a, "quotas": lista, "d": calculos[a.empresa_id].get((a.ano, a.periodo))})
+        d = calculos[a.empresa_id].get((a.ano, a.periodo))
+        linhas.append({"apuracao": a, "quotas": lista, "d": d, "valores": valores_das_quotas(d)})
 
     def chave(l):
         e = l["apuracao"].empresa

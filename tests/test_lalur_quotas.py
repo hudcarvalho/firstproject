@@ -86,3 +86,21 @@ def test_tela_filtros_e_aviso(client, app, lr):
     assert 'id="lembrete-quotas"' not in client.get("/empresas").get_data(as_text=True)
     assert empresas(situacao="enviada")[0] == ["EBM CHOCOLATES", "VILLA BOLICHE"]
     assert empresas(situacao="pendente")[0] == []
+
+
+def test_escolher_no_resumo_e_valores_das_quotas(client, app, lr):
+    a, _ = lr
+    client.post(f"/lalur/{a}/2026/1", data={"lucro_antes": "300.000,00", "compensar": "on", "aliquota_csll": "9"})
+    html = client.get(f"/lalur/{a}?ano=2026").get_data(as_text=True)
+    assert 'id="linha-quotas"' in html and "Quota única ou parcelado" in html
+    with app.app_context():
+        ap_id = LalurApuracao.query.filter_by(empresa_id=a).one().id
+    r = client.post(f"/lalur/quotas/{ap_id}/definir", data={"quotas": "3", "voltar": f"/lalur/{a}?ano=2026"})
+    assert r.headers["Location"].endswith(f"/lalur/{a}?ano=2026")
+    html = client.get(f"/lalur/{a}?ano=2026").get_data(as_text=True)
+    assert '<option value="3" selected>3 quotas</option>' in html
+    assert html.count("<strong>32.000,00</strong>") == 3  # IRPJ 69.000 + CSLL 27.000 em 3 quotas
+    html = client.get("/lalur/quotas?ano=2026").get_data(as_text=True)
+    assert html.count("R$ 32.000,00") == 3 and "IRPJ 23.000,00 · CSLL 9.000,00" in html
+    client.post(f"/lalur/quotas/{ap_id}/definir", data={"quotas": "1"})
+    assert "R$ 96.000,00" in client.get("/lalur/quotas?ano=2026").get_data(as_text=True)
