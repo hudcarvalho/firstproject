@@ -112,6 +112,10 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   período), o **Safra** (lançamentos agrupados por dia, do mais novo ao mais antigo, com os saldos da
   Poupança Plus em aba própria) e o **BMP** (Extrato Geral, com tipo, favorecido/DOC e ID da
   transação). PDFs com estrutura danificada são regravados automaticamente antes da leitura.
+- **Quotas do IRPJ/CSLL** (*Contábil → Quotas do IRPJ/CSLL (LALUR)*): na apuração de cada período
+  do LALUR informa-se se o imposto foi pago em quota única, 2 ou 3 quotas. A tela de quotas filtra
+  por ano, período, número de quotas e envio ao cliente. Todo dia 10 do mês de vencimento, um
+  lembrete aparece no topo do sistema e só some quando a quota é marcada como enviada.
 - **Obrigações** (menu ao lado de Clientes): todos os clientes ativos em formato de planilha
   (CÓDIGO, EMPRESA, CNPJ, TRIBUTAÇÃO, DEFIS, ECD, ECF, IBGE, OBSERVAÇÃO), por ano. As datas e a
   observação são digitadas direto na tabela e salvas ao sair do campo; filtros por código, nome,

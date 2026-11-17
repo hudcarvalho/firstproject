@@ -35,6 +35,28 @@
           <input class="form-control text-end valor" name="irpj_deduzir" value="{{ apuracao.irpj_deduzir | valor if apuracao else '' }}" placeholder="0,00" inputmode="decimal"></div>
         <div class="col-sm-6"><label class="form-label">CSLL a deduzir (retida/antecipada)</label>
           <input class="form-control text-end valor" name="csll_deduzir" value="{{ apuracao.csll_deduzir | valor if apuracao else '' }}" placeholder="0,00" inputmode="decimal"></div>
+        <div class="col-sm-6"><label class="form-label" for="quotas">Pagamento do IRPJ/CSLL</label>
+          <select class="form-select" name="quotas" id="quotas">
+            <option value="">Não informado</option>
+            <option value="1" {{ 'selected' if apuracao and apuracao.quotas == 1 }}>Quota única</option>
+            {% if periodo != 0 %}
+            <option value="2" {{ 'selected' if apuracao and apuracao.quotas == 2 }}>Dividido em 2 quotas</option>
+            <option value="3" {{ 'selected' if apuracao and apuracao.quotas == 3 }}>Dividido em 3 quotas</option>
+            {% endif %}
+          </select>
+          <div class="form-text">Todo dia {{ dia_lembrete }} do mês de vencimento aparece o lembrete para enviar a quota ao cliente.</div></div>
+        {% if quotas_cliente %}
+        <div class="col-sm-6"><label class="form-label">Envio ao cliente</label>
+          <ul class="list-unstyled small mb-0">
+          {% for q in quotas_cliente %}
+            <li>{{ q.rotulo }} · vence {{ q.vencimento | data_br }} ·
+              {% if q.envio %}<span class="text-success">✓ enviada em {{ q.envio.enviado_em | data_br }}</span>
+              {% elif q.pendente() %}<span class="badge text-bg-warning">🔔 enviar</span>
+              {% else %}<span class="text-muted">lembrete em {{ q.lembrete_em | data_br }}</span>{% endif %}</li>
+          {% endfor %}
+          </ul>
+          <a class="small" href="{{ url_for('lalur.quotas', ano=ano, periodo=periodo) }}">marcar envio na tela de quotas →</a></div>
+        {% endif %}
         <div class="col-12"><label class="form-label">Observação</label>
           <textarea class="form-control" name="observacao" rows="2">{{ apuracao.observacao or '' if apuracao }}</textarea></div>
       </div>

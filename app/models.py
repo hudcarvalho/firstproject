@@ -367,18 +367,35 @@ class LalurApuracao(db.Model):
     irpj_deduzir = db.Column(db.Numeric(14, 2), nullable=False, default=0)  # retenções, antecipações
     csll_deduzir = db.Column(db.Numeric(14, 2), nullable=False, default=0)
     observacao = db.Column(db.Text)
+    quotas = db.Column(db.Integer)  # pagamento do IRPJ/CSLL: 1 = quota única, 2 ou 3 quotas; None = não informado
 
     empresa = db.relationship("Empresa")
     lancamentos = db.relationship(
         "LalurLancamento", back_populates="apuracao", cascade="all, delete-orphan",
         order_by="(LalurLancamento.tipo, LalurLancamento.id)",
     )
+    envios = db.relationship("LalurQuotaEnvio", back_populates="apuracao", cascade="all, delete-orphan",
+                             order_by="LalurQuotaEnvio.numero")
 
     __table_args__ = (db.UniqueConstraint("empresa_id", "ano", "periodo"),)
 
     @property
     def periodo_label(self):
         return "Anual" if self.periodo == 0 else f"{self.periodo}º trimestre"
+
+
+class LalurQuotaEnvio(db.Model):
+    """Quota do IRPJ/CSLL já enviada ao cliente (some do lembrete do dia 10)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    apuracao_id = db.Column(db.Integer, db.ForeignKey("lalur_apuracao.id"), nullable=False)
+    numero = db.Column(db.Integer, nullable=False)  # 1ª, 2ª ou 3ª quota
+    enviado_em = db.Column(db.Date, nullable=False)
+    enviado_por = db.Column(db.String(120))
+
+    apuracao = db.relationship("LalurApuracao", back_populates="envios")
+
+    __table_args__ = (db.UniqueConstraint("apuracao_id", "numero"),)
 
 
 class LalurLancamento(db.Model):
