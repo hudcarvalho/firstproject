@@ -73,6 +73,9 @@
       <td class="text-nowrap small">
         {% set q = l.quotas[i] if i < l.quotas|length else none %}
         {% if q %}
+          {% set v = l.valores.get(q.numero) %}
+          {% if v %}<div class="fw-semibold" title="IRPJ {{ v[0] | valor }} + CSLL {{ v[1] | valor }}">R$ {{ v[2] | valor }}</div>
+          <div class="text-muted">IRPJ {{ v[0] | valor }} · CSLL {{ v[1] | valor }}</div>{% endif %}
           <div>vence {{ q.vencimento | data_br }}</div>
           <form method="post" action="{{ url_for('lalur.quota_envio', apuracao_id=a.id, numero=q.numero) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="voltar" value="{{ request.full_path }}">
@@ -97,5 +100,6 @@
 </table>
 </div></div>
 <p class="small text-muted mt-2">As quotas vencem no último dia útil de cada um dos meses seguintes ao trimestre
-  (ajuste anual: quota única em março do ano seguinte). O número de quotas também pode ser informado na apuração de cada período.</p>
+  (ajuste anual: quota única em março do ano seguinte). Valores sem juros: a 2ª quota tem +1% e a 3ª, Selic acumulada +1%
+  (calculados na Guia DARF). Nenhuma quota pode ser menor que R$ 1.000,00 por tributo. O número de quotas também pode ser informado na apuração de cada período.</p>
 {% endblock %}
