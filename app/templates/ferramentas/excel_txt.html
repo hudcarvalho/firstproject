@@ -8,7 +8,7 @@
       <label class="form-label" for="arquivo">Planilha de lançamentos (.xlsx ou .xls)</label>
       <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".xlsx,.xls" required>
       <div class="form-text">Colunas na ordem: <strong>Data</strong> | conta débito | conta crédito | <strong>Lançamento</strong> |
-        <strong>Valor</strong> | <strong>Participante</strong> (o cabeçalho é opcional; é lida a primeira aba).
+        <strong>Valor</strong> | <strong>Participante</strong> (o cabeçalho é opcional). Só a <strong>primeira aba</strong> é lida; as outras abas são ignoradas, assim como títulos, totais e linhas sem data.
         O arquivo é convertido na hora e não fica guardado no sistema.</div>
     </div>
     <div class="mb-3" style="max-width: 220px">

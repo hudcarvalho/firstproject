@@ -77,3 +77,40 @@ def test_valor_negativo_sai_sem_sinal():
     txt, n = converter(buf.getvalue())
     assert [l.split(b",")[4] for l in txt.splitlines()] == [b"22.84", b"700", b"1234.56", b"11.28", b"5.1"]
     assert b"-" not in txt
+
+
+def test_so_primeira_aba_e_linhas_que_nao_sao_lancamento():
+    from app.excel_txt import converter
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Lançamentos"
+    ws.append(["RELATÓRIO DE LANÇAMENTOS"])
+    ws.append(["Data", None, None, "Lançamento", "Valor (R$)", "Participante"])
+    ws.append([datetime(2026, 1, 2), 571, 858, "IOF", 22.84, None])
+    ws.append([46025, 16, 858, "SUPRIMENTO DE CAIXA", 700, 219])  # data como número do Excel
+    ws.append(["2026-01-04", 628, 858, "SUPRIMENTO DE CAIXA", 400, None])
+    ws.append([None, None, None, "TOTAL", 1122.84, None])
+    ws.append(["Observação: conferido", None, None, None, None, None])
+    outra = wb.create_sheet("Resumo")
+    outra.append(["qualquer", "coisa", "texto", "TOTAL", "abc", None])
+    outra.append([datetime(2026, 2, 1), "x", "y", "NÃO ENTRA", "erro", None])
+    buf = BytesIO()
+    wb.save(buf)
+    txt, n = converter(buf.getvalue())
+    assert n == 3
+    assert txt == (b"1,02/01/2026,571,858,22.84,1006,IOF,,0\r\n"
+                   b"2,03/01/2026,16,858,700,1006,SUPRIMENTO DE CAIXA,,219\r\n"
+                   b"3,04/01/2026,628,858,400,1006,SUPRIMENTO DE CAIXA,,0\r\n")
+
+
+def test_primeira_aba_sem_lancamentos_avisa_o_nome():
+    import pytest
+
+    from app.excel_txt import ErroPlanilha, converter
+    wb = Workbook()
+    wb.active.title = "Capa"
+    wb.create_sheet("Dados").append([datetime(2026, 1, 2), 1, 2, "IOF", 1, None])
+    buf = BytesIO()
+    wb.save(buf)
+    with pytest.raises(ErroPlanilha, match="primeira aba .*Capa"):
+        converter(buf.getvalue())

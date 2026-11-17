@@ -9,7 +9,7 @@ vira ponto (a vírgula separa os campos); participante vazio vira 0; linhas term
 """
 import re
 import warnings
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from io import BytesIO
 
@@ -23,14 +23,22 @@ class ErroPlanilha(Exception):
 
 
 def _linhas(conteudo):
+    """(nome da primeira aba, linhas dela). Só a primeira aba (a da esquerda) é lida; as demais são ignoradas."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if conteudo[:2] == b"PK":
             from openpyxl import load_workbook
-            ws = load_workbook(BytesIO(conteudo), data_only=True, read_only=True).worksheets[0]
-            return [list(r) for r in ws.iter_rows(values_only=True)]
+            try:
+                wb = load_workbook(BytesIO(conteudo), data_only=True, read_only=True)
+                ws = wb[wb.sheetnames[0]]
+                linhas = [list(r) for r in ws.iter_rows(values_only=True)]
+            except Exception:  # alguns geradores de planilha não funcionam no modo somente leitura
+                wb = load_workbook(BytesIO(conteudo), data_only=True)
+                ws = wb[wb.sheetnames[0]]
+                linhas = [list(r) for r in ws.iter_rows(values_only=True)]
+            return wb.sheetnames[0], linhas
         import xlrd
-        livro = xlrd.open_workbook(file_contents=conteudo)
+        livro = xlrd.open_workbook(file_contents=conteudo, on_demand=True)
         sh = livro.sheet_by_index(0)
         linhas = []
         for i in range(sh.nrows):
@@ -43,7 +51,7 @@ def _linhas(conteudo):
                 else:
                     linha.append(c.value)
             linhas.append(linha)
-        return linhas
+        return sh.name, linhas
 
 
 def _texto(v):
@@ -57,11 +65,22 @@ def _texto(v):
 def _data(v):
     if isinstance(v, (datetime, date)):
         return v.strftime("%d/%m/%Y")
+    if isinstance(v, (int, float)) and not isinstance(v, bool) and 20000 < v < 80000:
+        # data guardada como número de série do Excel (ex.: 46024 = 02/01/2026)
+        return (datetime(1899, 12, 30) + timedelta(days=int(v))).strftime("%d/%m/%Y")
     t = _texto(v)
     m = re.fullmatch(r"(\d{1,2})[/.-](\d{1,2})[/.-](\d{4})(?: .*)?", t)
     if m:
-        return f"{int(m[1]):02d}/{int(m[2]):02d}/{m[3]}"
-    return None
+        d, mes, a = int(m[1]), int(m[2]), int(m[3])
+    else:
+        m = re.fullmatch(r"(\d{4})-(\d{1,2})-(\d{1,2})(?:[ T].*)?", t)
+        if not m:
+            return None
+        a, mes, d = int(m[1]), int(m[2]), int(m[3])
+    try:
+        return date(a, mes, d).strftime("%d/%m/%Y")
+    except ValueError:
+        return None
 
 
 def _decimal(v):
@@ -104,7 +123,7 @@ def _colunas(linhas):
 def converter(conteudo, codigo=CODIGO_PADRAO):
     """Planilha (.xlsx/.xls em bytes) -> (TXT em bytes, nº de lançamentos)."""
     try:
-        linhas = _linhas(conteudo)
+        aba, linhas = _linhas(conteudo)
     except Exception as e:
         raise ErroPlanilha("Não foi possível ler a planilha. Confira se é um arquivo Excel válido.") from e
     inicio, col = _colunas(linhas)
@@ -116,8 +135,8 @@ def converter(conteudo, codigo=CODIGO_PADRAO):
             return linha[j] if j < len(linha) else None
         data = _data(cel("data"))
         if not data:
-            if any(_texto(c) for c in linha) and _texto(cel("valor")) and _texto(cel("historico")):
-                erros.append(f"linha {n}: data inválida ({_texto(cel('data')) or 'vazia'})")
+            continue  # títulos, totais, observações e linhas em branco ficam de fora
+        if not _texto(cel("valor")) and not _texto(cel("historico")):
             continue
         valor = _decimal(cel("valor"))
         if valor is None:
@@ -130,9 +149,9 @@ def converter(conteudo, codigo=CODIGO_PADRAO):
                                formatar_valor(valor), codigo, historico, "", participante]))
     if erros:
         mais = f" (e mais {len(erros) - 5})" if len(erros) > 5 else ""
-        raise ErroPlanilha("Corrija a planilha: " + "; ".join(erros[:5]) + mais + ".")
+        raise ErroPlanilha(f"Corrija a planilha (aba “{aba}”): " + "; ".join(erros[:5]) + mais + ".")
     if not saida:
-        raise ErroPlanilha("Nenhum lançamento encontrado. A planilha precisa ter as colunas Data, conta débito, "
-                           "conta crédito, Lançamento, Valor e Participante.")
+        raise ErroPlanilha(f"Nenhum lançamento encontrado na primeira aba (“{aba}”). Ela precisa ter as colunas "
+                           "Data, conta débito, conta crédito, Lançamento, Valor e Participante.")
     texto = "".join(l + "\r\n" for l in saida)
     return texto.encode("cp1252", errors="replace"), len(saida)
