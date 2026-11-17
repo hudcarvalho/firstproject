@@ -45,24 +45,22 @@
         {% endif %}
       {% endfor %}
       <tr class="table-light"><th colspan="{{ 1 + colunas|length }}" class="small text-uppercase text-muted">Pagamento do IRPJ/CSLL</th></tr>
-      <tr id="linha-quotas"><td class="fw-semibold">Quota única ou parcelado<div class="small text-muted fw-normal">vai para Contábil → Quotas do IRPJ/CSLL</div></td>
+      <tr id="linha-quotas"><td class="fw-semibold">Quota única ou parcelado<div class="small text-muted fw-normal">informado no lançamento de cada período</div></td>
         {% for c in colunas %}
         <td class="text-end">
           {% if c.d and (c.d.irpj_a_pagar > 0 or c.d.csll_a_pagar > 0) %}
-          <form method="post" action="{{ url_for('lalur.quota_definir', apuracao_id=c.apuracao.id) }}" class="d-inline-block"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="voltar" value="{{ request.full_path }}">
-            <select class="form-select form-select-sm w-auto ms-auto {{ 'border-warning' if not c.apuracao.quotas }}" name="quotas" onchange="this.form.submit()" aria-label="Quotas {{ c.rotulo }}">
-              <option value="">Não informado</option>
-              {% for n, r in opcoes_quotas.items() %}{% if c.periodo != 0 or n == 1 %}<option value="{{ n }}" {{ 'selected' if c.apuracao.quotas == n }}>{{ r }}</option>{% endif %}{% endfor %}
-            </select>
-          </form>
-          {% for n, (irpj, csll, total) in c.valores.items() %}
-          <div class="small text-nowrap mt-1" title="IRPJ {{ irpj | valor }} + CSLL {{ csll | valor }}">{{ 'Única' if c.valores|length == 1 else n ~ 'ª' }}: <strong>{{ total | valor }}</strong></div>
-          {% endfor %}
+            {% if c.apuracao.quotas %}
+            <div class="fw-semibold">{{ opcoes_quotas[c.apuracao.quotas] }}</div>
+            {% for n, (irpj, csll, total) in c.valores.items() %}
+            <div class="small text-nowrap mt-1"><span class="text-muted">{{ 'Única' if c.valores|length == 1 else n ~ 'ª' }}:</span>
+              IRPJ {{ irpj | valor }} · CSLL {{ csll | valor }}</div>
+            {% endfor %}
+            {% else %}
+            <a class="small text-warning-emphasis" href="{{ url_for('lalur.periodo', id=empresa.id, ano=ano, periodo=c.periodo) }}">não informado — informar</a>
+            {% endif %}
           {% elif c.d %}<span class="small text-muted">sem imposto a pagar</span>{% endif %}
         </td>
         {% endfor %}
-      </tr>
     </tbody>
   </table>
   </div>

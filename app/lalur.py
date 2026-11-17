@@ -285,6 +285,7 @@ def periodo(id, ano, periodo):
         tributos=LalurLancamento.TRIBUTOS, sugestoes_adicao=SUGESTOES_ADICAO,
         sugestoes_exclusao=SUGESTOES_EXCLUSAO, dia_lembrete=DIA_LEMBRETE,
         quotas_cliente=quotas_do_cliente(apuracao) if apuracao else [],
+        valores_quotas=valores_das_quotas(calc.get((ano, periodo))),
     )
 
 

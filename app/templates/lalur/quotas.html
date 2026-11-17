@@ -74,8 +74,8 @@
         {% set q = l.quotas[i] if i < l.quotas|length else none %}
         {% if q %}
           {% set v = l.valores.get(q.numero) %}
-          {% if v %}<div class="fw-semibold" title="IRPJ {{ v[0] | valor }} + CSLL {{ v[1] | valor }}">R$ {{ v[2] | valor }}</div>
-          <div class="text-muted">IRPJ {{ v[0] | valor }} · CSLL {{ v[1] | valor }}</div>{% endif %}
+          {% if v %}<div><span class="text-muted">IRPJ</span> <strong>{{ v[0] | valor }}</strong></div>
+          <div><span class="text-muted">CSLL</span> <strong>{{ v[1] | valor }}</strong></div>{% endif %}
           <div>vence {{ q.vencimento | data_br }}</div>
           <form method="post" action="{{ url_for('lalur.quota_envio', apuracao_id=a.id, numero=q.numero) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="hidden" name="voltar" value="{{ request.full_path }}">

@@ -141,6 +141,14 @@
         <tr><td>(−) IRPJ devido</td><td class="text-end">{{ d.irpj_devido | valor }}</td></tr>
         <tr><td>(−) CSLL devida</td><td class="text-end">{{ d.csll_devida | valor }}</td></tr>
         <tr class="fw-bold table-success"><td>= Lucro líquido do período</td><td class="text-end">{{ d.lucro_liquido | valor }}</td></tr>
+        {% if valores_quotas %}
+        <tr class="table-light"><th colspan="2" class="small text-uppercase text-muted">Pagamento — {{ 'quota única' if valores_quotas|length == 1 else valores_quotas|length ~ ' quotas' }}</th></tr>
+        {% for q in quotas_cliente %}{% set v = valores_quotas.get(q.numero) %}{% if v %}
+        <tr><td>{{ q.rotulo }} <span class="small text-muted">(vence {{ q.vencimento | data_br }})</span>
+          <div class="small">IRPJ</div><div class="small">CSLL</div></td>
+          <td class="text-end"><br><div class="small">{{ v[0] | valor }}</div><div class="small">{{ v[1] | valor }}</div></td></tr>
+        {% endif %}{% endfor %}
+        {% endif %}
       </tbody>
     </table>
     {% else %}
