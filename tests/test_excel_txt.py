@@ -114,3 +114,22 @@ def test_primeira_aba_sem_lancamentos_avisa_o_nome():
     wb.save(buf)
     with pytest.raises(ErroPlanilha, match="primeira aba .*Capa"):
         converter(buf.getvalue())
+
+
+def test_ignora_abas_ocultas_e_cabecalho_descricao_debito():
+    from app.excel_txt import converter
+    wb = Workbook()
+    oculta = wb.active
+    oculta.title = "ITAU 01.2026"
+    oculta.sheet_state = "hidden"
+    oculta.append(["DATA", "DESCRIÇÃO", "DÉBITO", "CRÉDITO", "SALDO"])
+    oculta.append([datetime(2026, 1, 5), "Pagamentos", 16351.27, None, 16400.87])
+    ws = wb.create_sheet("BB SERVIÇOS 01.2026")
+    ws.append(["DATA", None, None, "DESCRIÇÃO", "DÉBITO", "CRÉDITO"])
+    ws.append([datetime(2026, 5, 11), 1653, 842, "Tarifa", 87.82, None])
+    ws.append([datetime(2026, 5, 29), 842, 3530, "Transferência Striker Bar BB", 2370, None])
+    buf = BytesIO()
+    wb.save(buf)
+    txt, n = converter(buf.getvalue())
+    assert txt == ("1,11/05/2026,1653,842,87.82,1006,Tarifa,,0\r\n"
+                   "2,29/05/2026,842,3530,2370,1006,Transferência Striker Bar BB,,0\r\n").encode("cp1252")

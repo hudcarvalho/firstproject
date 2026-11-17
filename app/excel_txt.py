@@ -22,24 +22,46 @@ class ErroPlanilha(Exception):
     pass
 
 
+def _primeira_visivel(abas):
+    return next((ws for ws in abas if getattr(ws, "sheet_state", "visible") == "visible"), abas[0])
+
+
+def _linhas_openpyxl(ws):
+    linhas = []
+    vazias = 0
+    for r in ws.iter_rows(values_only=True):
+        # planilhas com formatação até a linha 1.048.576: para depois de 500 linhas vazias seguidas
+        if any(v is not None and v != "" for v in r):
+            linhas.extend([[]] * vazias)
+            linhas.append(list(r))
+            vazias = 0
+        else:
+            vazias += 1
+            if vazias > 500:
+                break
+    return linhas
+
+
 def _linhas(conteudo):
-    """(nome da primeira aba, linhas dela). Só a primeira aba (a da esquerda) é lida; as demais são ignoradas."""
+    """(nome da aba, linhas dela). Só a primeira aba VISÍVEL (a primeira que aparece no Excel) é lida;
+    abas ocultas e as demais são ignoradas."""
     with warnings.catch_warnings():
         warnings.simplefilter("ignore")
         if conteudo[:2] == b"PK":
             from openpyxl import load_workbook
             try:
                 wb = load_workbook(BytesIO(conteudo), data_only=True, read_only=True)
-                ws = wb[wb.sheetnames[0]]
-                linhas = [list(r) for r in ws.iter_rows(values_only=True)]
+                ws = _primeira_visivel(wb.worksheets)
+                linhas = _linhas_openpyxl(ws)
             except Exception:  # alguns geradores de planilha não funcionam no modo somente leitura
                 wb = load_workbook(BytesIO(conteudo), data_only=True)
-                ws = wb[wb.sheetnames[0]]
-                linhas = [list(r) for r in ws.iter_rows(values_only=True)]
-            return wb.sheetnames[0], linhas
+                ws = _primeira_visivel(wb.worksheets)
+                linhas = _linhas_openpyxl(ws)
+            return ws.title, linhas
         import xlrd
         livro = xlrd.open_workbook(file_contents=conteudo, on_demand=True)
-        sh = livro.sheet_by_index(0)
+        indice = next((i for i in range(livro.nsheets) if livro.sheet_by_index(i).visibility == 0), 0)
+        sh = livro.sheet_by_index(indice)
         linhas = []
         for i in range(sh.nrows):
             linha = []
@@ -113,10 +135,17 @@ def _colunas(linhas):
         nomes = [_texto(c).lower() for c in linha]
         if "data" in nomes:
             d = nomes.index("data")
-            def achar(prefixo, padrao):
-                return next((j for j, n in enumerate(nomes) if n.startswith(prefixo)), padrao)
-            return i + 1, {"data": d, "debito": d + 1, "credito": d + 2, "historico": achar("lan", d + 3),
-                           "valor": achar("valor", d + 4), "participante": achar("partic", d + 5)}
+            def achar(prefixos, padrao):
+                # depois das colunas de conta (débito/crédito logo após a data), na ordem de preferência
+                for p in prefixos:
+                    j = next((j for j, n in enumerate(nomes) if j > d + 2 and n.startswith(p)), None)
+                    if j is not None:
+                        return j
+                return padrao
+            return i + 1, {"data": d, "debito": d + 1, "credito": d + 2,
+                           "historico": achar(("lan", "descri", "hist"), d + 3),
+                           "valor": achar(("valor", "débito", "debito"), d + 4),
+                           "participante": achar(("partic",), d + 5)}
     return 0, {"data": 0, "debito": 1, "credito": 2, "historico": 3, "valor": 4, "participante": 5}
 
 
