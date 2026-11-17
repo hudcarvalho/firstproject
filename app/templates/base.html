@@ -19,7 +19,7 @@
       <ul class="navbar-nav">
         {% for m in modulos_ativos %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {{ 'active' if mod_atual == m.codigo or (m.codigo == 'contabil' and ep in ('distribuicao.exportar', 'lalur.grupo')) }}" href="#" data-bs-toggle="dropdown">{{ m.nome }}</a>
+          <a class="nav-link dropdown-toggle {{ 'active' if mod_atual == m.codigo or (m.codigo == 'contabil' and ep in ('distribuicao.exportar', 'lalur.grupo', 'lalur.quotas')) }}" href="#" data-bs-toggle="dropdown">{{ m.nome }}</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo) }}">Painel</a></li>
             {% if current_user.responsavel_id %}<li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo, responsavel=current_user.responsavel_id) }}">Minhas empresas</a></li>{% endif %}
@@ -32,6 +32,7 @@
             <li><h6 class="dropdown-header">Relatórios</h6></li>
             <li><a class="dropdown-item" href="{{ url_for('distribuicao.exportar') }}">Exportar distribuição de lucros (Excel)</a></li>
             <li><a class="dropdown-item" href="{{ url_for('lalur.grupo') }}">Lucro por grupo econômico (Excel/PDF)</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('lalur.quotas') }}">Quotas do IRPJ/CSLL (LALUR)</a></li>
             {% endif %}
           </ul>
         </li>
@@ -74,6 +75,12 @@
   </div>
 </nav>
 <main class="container-fluid px-4 pb-5">
+  {% if lembrete_quotas %}
+  <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 py-2 mt-2" id="lembrete-quotas">
+    🔔 <strong>Lembrete:</strong> {{ lembrete_quotas }} quota(s) de IRPJ/CSLL para enviar ao cliente.
+    <a class="btn btn-sm btn-warning ms-auto" href="{{ url_for('lalur.quotas', situacao='pendente') }}">Ver e marcar como enviadas</a>
+  </div>
+  {% endif %}
   {% with msgs = get_flashed_messages(with_categories=true) %}
     {% for cat, msg in msgs %}
       <div class="alert alert-{{ cat }} alert-dismissible fade show" role="alert">{{ msg }}<button type="button" class="btn-close" data-bs-dismiss="alert"></button></div>

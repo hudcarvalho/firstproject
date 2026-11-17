@@ -71,6 +71,21 @@ def create_app(config=None):
     def modulos_no_menu():
         return {"modulos_ativos": Modulo.ativos()}
 
+    @app.context_processor
+    def lembrete_quotas():
+        """Quantas quotas do IRPJ/CSLL estão no lembrete (a partir do dia 10 do mês do vencimento)."""
+        from flask import request
+        from flask_login import current_user
+
+        if not current_user.is_authenticated or request.endpoint == "lalur.quotas":
+            return {}
+        from .lalur import lembretes_pendentes
+        try:
+            return {"lembrete_quotas": len(lembretes_pendentes())}
+        except Exception:  # o lembrete nunca derruba a página
+            app.logger.exception("Falha ao calcular o lembrete de quotas")
+            return {}
+
     # Endereço dos arquivos estáticos com a "impressão digital" do conteúdo (?v=...), para o
     # navegador baixar de novo sempre que o arquivo mudar em vez de usar a cópia em cache.
     versoes = {}

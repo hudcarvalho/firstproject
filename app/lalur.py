@@ -13,7 +13,7 @@ from decimal import ROUND_HALF_UP, Decimal
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
 from .competencia import parse_valor
-from .models import Empresa, LalurApuracao, LalurLancamento, LalurSaldoInicial, db
+from .models import Empresa, LalurApuracao, LalurLancamento, LalurQuotaEnvio, LalurSaldoInicial, db
 
 bp = Blueprint("lalur", __name__, url_prefix="/lalur")
 
@@ -282,7 +282,8 @@ def periodo(id, ano, periodo):
         "lalur/periodo.html", empresa=empresa, ano=ano, periodo=periodo, rotulo=rotulo,
         apuracao=apuracao, d=calc.get((ano, periodo)), tipos=LalurLancamento.TIPOS,
         tributos=LalurLancamento.TRIBUTOS, sugestoes_adicao=SUGESTOES_ADICAO,
-        sugestoes_exclusao=SUGESTOES_EXCLUSAO,
+        sugestoes_exclusao=SUGESTOES_EXCLUSAO, dia_lembrete=DIA_LEMBRETE,
+        quotas_cliente=quotas_do_cliente(apuracao) if apuracao else [],
     )
 
 
@@ -313,6 +314,8 @@ def salvar(id, ano, periodo):
     a.compensar = f.get("compensar") == "on"
     a.aliquota_csll, a.irpj_deduzir, a.csll_deduzir = aliquota, irpj_ded, csll_ded
     a.observacao = (f.get("observacao") or "").strip() or None
+    if "quotas" in f:
+        definir_quotas(a, f.get("quotas"))
     db.session.commit()
     flash("Apuração salva." if lucro is not None else
           "Apuração salva. Informe o lucro antes do IRPJ/CSLL para calcular.", "success")
@@ -740,6 +743,9 @@ def guia(id, ano, periodo):
         return _voltar_periodo(id, ano, periodo)
     a = request.args
     anual = periodo == 0
+    informadas = d.apuracao.quotas
+    if "forma" not in a and informadas:  # sem escolha na tela: usa as quotas informadas na apuração
+        a = {**a.to_dict(), "forma": "parcelado" if informadas > 1 else "unica", "parcelas": str(informadas)}
     forma = "unica" if anual or a.get("forma") != "parcelado" else "parcelado"
     try:
         parcelas = 1 if forma == "unica" else int(a.get("parcelas", "3"))
@@ -970,3 +976,171 @@ def grupo():
     return render_template("lalur/grupo.html", grupos=grupos, escolhido=escolhido, ano=ano,
                            colunas=[(p, _rotulo_coluna_grupo(p)) for p in colunas], linhas=linhas,
                            totais=totais, total_geral=sum(totais, Decimal("0")))
+
+
+# ---------------------------------------------------------------- quotas do IRPJ/CSLL e lembrete do dia 10
+
+DIA_LEMBRETE = 10
+OPCOES_QUOTAS = {1: "Quota única", 2: "2 quotas", 3: "3 quotas"}
+
+
+@dataclass
+class QuotaCliente:
+    """Uma quota do IRPJ/CSLL a enviar ao cliente: vence no último dia útil do mês; o lembrete
+    aparece a partir do dia 10 desse mês e some quando a quota é marcada como enviada."""
+    apuracao: LalurApuracao
+    numero: int
+    de: int
+    vencimento: date
+    envio: LalurQuotaEnvio | None
+
+    @property
+    def lembrete_em(self):
+        return date(self.vencimento.year, self.vencimento.month, DIA_LEMBRETE)
+
+    def pendente(self, hoje=None):
+        return self.envio is None and (hoje or date.today()) >= self.lembrete_em
+
+    @property
+    def rotulo(self):
+        return "Quota única" if self.de == 1 else f"{self.numero}ª de {self.de}"
+
+
+def quotas_do_cliente(apuracao):
+    from . import guia_darf
+
+    if not apuracao.quotas:
+        return []
+    total = 1 if apuracao.periodo == 0 else apuracao.quotas
+    envios = {e.numero: e for e in apuracao.envios}
+    lista = []
+    for n in range(1, total + 1):
+        if apuracao.periodo == 0:
+            venc = guia_darf.ultimo_dia_util(apuracao.ano + 1, 3)
+        else:
+            venc = guia_darf.ultimo_dia_util(*guia_darf._mes_somado(apuracao.ano, apuracao.periodo * 3, n))
+        lista.append(QuotaCliente(apuracao, n, total, venc, envios.get(n)))
+    return lista
+
+
+def definir_quotas(apuracao, valor):
+    """valor: '', '1', '2' ou '3'. Apaga envios de quotas que deixaram de existir."""
+    try:
+        n = int(valor) if str(valor or "").strip() else None
+    except ValueError:
+        n = None
+    if n not in (None, 1, 2, 3):
+        n = None
+    if n and apuracao.periodo == 0:
+        n = 1  # ajuste anual: só quota única
+    apuracao.quotas = n
+    for e in list(apuracao.envios):
+        if not n or e.numero > n:
+            apuracao.envios.remove(e)
+
+
+def lembretes_pendentes(hoje=None):
+    """Quotas de empresas ativas do Lucro Real a enviar (do dia 10 do mês do vencimento em diante)."""
+    hoje = hoje or date.today()
+    pendentes = []
+    for a in (LalurApuracao.query.join(Empresa).filter(LalurApuracao.quotas.isnot(None), Empresa.ativo.is_(True))):
+        if a.empresa.lucro_real:
+            pendentes += [q for q in quotas_do_cliente(a) if q.pendente(hoje)]
+    return sorted(pendentes, key=lambda q: (q.vencimento, q.apuracao.empresa.razao_social))
+
+
+def _voltar_quotas():
+    destino = request.form.get("voltar") or ""
+    if destino.startswith("/") and not destino.startswith("//"):
+        return redirect(destino)
+    return redirect(url_for("lalur.quotas"))
+
+
+def _marcar_envio(apuracao, numero, enviado):
+    from flask_login import current_user
+
+    existente = next((e for e in apuracao.envios if e.numero == numero), None)
+    if enviado and existente is None and numero in {q.numero for q in quotas_do_cliente(apuracao)}:
+        apuracao.envios.append(LalurQuotaEnvio(numero=numero, enviado_em=date.today(),
+                                               enviado_por=getattr(current_user, "nome", None)))
+    elif not enviado and existente is not None:
+        apuracao.envios.remove(existente)
+
+
+@bp.post("/quotas/<int:apuracao_id>/<int:numero>/envio")
+def quota_envio(apuracao_id, numero):
+    apuracao = db.session.get(LalurApuracao, apuracao_id) or abort(404)
+    _marcar_envio(apuracao, numero, request.form.get("enviado") == "1")
+    db.session.commit()
+    return _voltar_quotas()
+
+
+@bp.post("/quotas/enviar-todas")
+def quotas_enviar_todas():
+    marcadas = 0
+    for item in request.form.getlist("quota"):
+        try:
+            apuracao_id, numero = (int(x) for x in item.split("-"))
+        except ValueError:
+            continue
+        apuracao = db.session.get(LalurApuracao, apuracao_id)
+        if apuracao is not None:
+            antes = len(apuracao.envios)
+            _marcar_envio(apuracao, numero, True)
+            marcadas += len(apuracao.envios) - antes
+    db.session.commit()
+    flash(f"{marcadas} quota(s) marcada(s) como enviada(s) ao cliente.", "success")
+    return _voltar_quotas()
+
+
+@bp.post("/quotas/<int:apuracao_id>/definir")
+def quota_definir(apuracao_id):
+    apuracao = db.session.get(LalurApuracao, apuracao_id) or abort(404)
+    definir_quotas(apuracao, request.form.get("quotas"))
+    db.session.commit()
+    return _voltar_quotas()
+
+
+@bp.route("/quotas")
+def quotas():
+    """Apurações do LALUR com o pagamento em quotas: filtros e marcação de envio ao cliente."""
+    hoje = date.today()
+    args = request.args
+    situacao = args.get("situacao", "")
+    ano = None if situacao == "pendente" and not args.get("ano") else _ano()
+    periodo = args.get("periodo", "")
+    filtro_quotas = args.get("quotas", "")
+    consulta = LalurApuracao.query.join(Empresa).filter(Empresa.ativo.is_(True))
+    if ano:
+        consulta = consulta.filter(LalurApuracao.ano == ano)
+    if periodo in ("0", "1", "2", "3", "4"):
+        consulta = consulta.filter(LalurApuracao.periodo == int(periodo))
+    if filtro_quotas in ("1", "2", "3"):
+        consulta = consulta.filter(LalurApuracao.quotas == int(filtro_quotas))
+    elif filtro_quotas == "nao":
+        consulta = consulta.filter(LalurApuracao.quotas.is_(None))
+    calculos = {}
+    linhas = []
+    for a in consulta.all():
+        if not a.empresa.lucro_real:
+            continue
+        lista = quotas_do_cliente(a)
+        if situacao == "pendente" and not any(q.pendente(hoje) for q in lista):
+            continue
+        if situacao == "enviada" and not (lista and all(q.envio for q in lista)):
+            continue
+        if a.empresa_id not in calculos:
+            calculos[a.empresa_id] = demonstrativos(a.empresa)[0]
+        linhas.append({"apuracao": a, "quotas": lista, "d": calculos[a.empresa_id].get((a.ano, a.periodo))})
+
+    def chave(l):
+        e = l["apuracao"].empresa
+        c = (e.codigo or "").strip()
+        return (l["apuracao"].ano, l["apuracao"].periodo or 5,
+                (0, int(c), "") if c.isdigit() else (1, 0, c or e.razao_social.lower()))
+    linhas.sort(key=chave)
+    pendentes = [q for l in linhas for q in l["quotas"] if q.pendente(hoje)]
+    return render_template("lalur/quotas.html", linhas=linhas, ano=ano, periodo=periodo,
+                           filtro_quotas=filtro_quotas, situacao=situacao, hoje=hoje, opcoes=OPCOES_QUOTAS,
+                           pendentes=pendentes, rotulo_periodo=rotulo_periodo, dia_lembrete=DIA_LEMBRETE,
+                           anos=range(hoje.year + 1, 2019, -1))

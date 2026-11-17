@@ -1,0 +1,101 @@
+{% extends "base.html" %}
+{% block title %}Quotas IRPJ/CSLL{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h1 class="h3 mb-0">Quotas do IRPJ/CSLL (LALUR)</h1>
+  <span class="small text-muted">Lembrete: todo dia {{ dia_lembrete }}, as quotas que vencem no mês aparecem para envio ao cliente
+    e só somem depois de marcadas como enviadas.</span>
+</div>
+
+<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3 small" id="filtros-quotas">
+  <div><label class="form-label mb-0" for="f-ano">Ano</label>
+    <select class="form-select form-select-sm" name="ano" id="f-ano" onchange="this.form.submit()">
+      {% if situacao == 'pendente' %}<option value="" {{ 'selected' if not ano }}>Todos</option>{% endif %}
+      {% for a in anos %}<option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>{% endfor %}
+    </select></div>
+  <div><label class="form-label mb-0" for="f-periodo">Período</label>
+    <select class="form-select form-select-sm" name="periodo" id="f-periodo" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      {% for p in (1, 2, 3, 4, 0) %}<option value="{{ p }}" {{ 'selected' if periodo == p|string }}>{{ rotulo_periodo(p) }}</option>{% endfor %}
+    </select></div>
+  <div><label class="form-label mb-0" for="f-quotas">Quotas</label>
+    <select class="form-select form-select-sm {{ 'filtro-ativo' if filtro_quotas }}" name="quotas" id="f-quotas" onchange="this.form.submit()">
+      <option value="">Todas</option>
+      {% for n, r in opcoes.items() %}<option value="{{ n }}" {{ 'selected' if filtro_quotas == n|string }}>{{ r }}</option>{% endfor %}
+      <option value="nao" {{ 'selected' if filtro_quotas == 'nao' }}>Não informado</option>
+    </select></div>
+  <div><label class="form-label mb-0" for="f-situacao">Envio ao cliente</label>
+    <select class="form-select form-select-sm {{ 'filtro-ativo' if situacao }}" name="situacao" id="f-situacao" onchange="this.form.submit()">
+      <option value="">Todos</option>
+      <option value="pendente" {{ 'selected' if situacao == 'pendente' }}>🔔 A enviar (lembrete)</option>
+      <option value="enviada" {{ 'selected' if situacao == 'enviada' }}>✓ Todas enviadas</option>
+    </select></div>
+  <span class="ms-auto text-muted">{{ linhas|length }} apuração(ões)</span>
+</form>
+
+{% if pendentes %}
+<form method="post" action="{{ url_for('lalur.quotas_enviar_todas') }}" class="alert alert-warning d-flex flex-wrap align-items-center gap-2 py-2"
+      onsubmit="return confirm('Marcar as {{ pendentes|length }} quota(s) a enviar desta lista como enviadas?')">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <input type="hidden" name="voltar" value="{{ request.full_path }}">
+  {% for q in pendentes %}<input type="hidden" name="quota" value="{{ q.apuracao.id }}-{{ q.numero }}">{% endfor %}
+  🔔 <strong>{{ pendentes|length }} quota(s) a enviar</strong> nesta lista.
+  <button class="btn btn-sm btn-warning ms-auto">Marcar todas como enviadas</button>
+</form>
+{% endif %}
+
+<div class="card"><div class="table-responsive planilha">
+<table class="table table-sm table-bordered align-middle mb-0">
+  <thead>
+    <tr class="titulos">
+      <th>Código</th><th>Empresa</th><th>Período</th><th class="text-end">IRPJ a pagar</th><th class="text-end">CSLL a pagar</th>
+      <th style="width: 150px">Quotas</th><th>1ª quota</th><th>2ª quota</th><th>3ª quota</th>
+    </tr>
+  </thead>
+  <tbody>
+  {% for l in linhas %}{% set a = l.apuracao %}
+    <tr>
+      <td class="text-end">{{ a.empresa.codigo or '' }}</td>
+      <td><a class="link-dark text-decoration-none" href="{{ url_for('lalur.periodo', id=a.empresa_id, ano=a.ano, periodo=a.periodo) }}">{{ a.empresa.razao_social }}</a></td>
+      <td class="text-nowrap">{{ rotulo_periodo(a.periodo, curto=True) }} {{ a.ano }}</td>
+      <td class="text-end text-nowrap">{{ l.d.irpj_a_pagar | valor if l.d else '—' }}</td>
+      <td class="text-end text-nowrap">{{ l.d.csll_a_pagar | valor if l.d else '—' }}</td>
+      <td>
+        <form method="post" action="{{ url_for('lalur.quota_definir', apuracao_id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <input type="hidden" name="voltar" value="{{ request.full_path }}">
+          <select class="form-select form-select-sm" name="quotas" onchange="this.form.submit()" aria-label="Quotas {{ a.empresa.razao_social }}">
+            <option value="">Não informado</option>
+            {% for n, r in opcoes.items() %}{% if a.periodo != 0 or n == 1 %}<option value="{{ n }}" {{ 'selected' if a.quotas == n }}>{{ r }}</option>{% endif %}{% endfor %}
+          </select>
+        </form>
+      </td>
+      {% for i in range(3) %}
+      <td class="text-nowrap small">
+        {% set q = l.quotas[i] if i < l.quotas|length else none %}
+        {% if q %}
+          <div>vence {{ q.vencimento | data_br }}</div>
+          <form method="post" action="{{ url_for('lalur.quota_envio', apuracao_id=a.id, numero=q.numero) }}" class="d-inline"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="voltar" value="{{ request.full_path }}">
+            {% if q.envio %}
+              <input type="hidden" name="enviado" value="0">
+              <span class="text-success">✓ enviada {{ q.envio.enviado_em | data_br }}</span>
+              <button class="btn btn-link btn-sm p-0 ms-1 small" title="Desfazer">desfazer</button>
+            {% else %}
+              <input type="hidden" name="enviado" value="1">
+              {% if q.pendente(hoje) %}<span class="badge text-bg-warning">🔔 enviar</span>{% else %}<span class="text-muted">lembrete em {{ q.lembrete_em | data_br }}</span>{% endif %}
+              <button class="btn btn-outline-success btn-sm py-0 ms-1">Marcar enviada</button>
+            {% endif %}
+          </form>
+        {% endif %}
+      </td>
+      {% endfor %}
+    </tr>
+  {% else %}
+    <tr><td colspan="9" class="text-center text-muted py-4">Nenhuma apuração do LALUR com esses filtros.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+<p class="small text-muted mt-2">As quotas vencem no último dia útil de cada um dos meses seguintes ao trimestre
+  (ajuste anual: quota única em março do ano seguinte). O número de quotas também pode ser informado na apuração de cada período.</p>
+{% endblock %}
