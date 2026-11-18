@@ -4,7 +4,7 @@ from io import BytesIO
 import pytest
 from openpyxl import load_workbook
 
-from app.models import Empresa, ObrigacaoAnual, RegimeTributario, db
+from app.models import Empresa, Modulo, ObrigacaoAnual, RegimeTributario, Responsavel, db
 
 
 @pytest.fixture
@@ -15,7 +15,9 @@ def empresas(app):
         a = Empresa(codigo="46", razao_social="EXATA CONTABIL", cnpj="11222333000181", regime=simples)
         b = Empresa(codigo="29", razao_social="CHAVEIRO ITALIA LTDA", cnpj="45997418000153", regime=presumido)
         c = Empresa(codigo="5", razao_social="INATIVA LTDA", cnpj="06990590000123", regime=simples, ativo=False)
-        db.session.add_all([a, b, c])
+        ellen = Responsavel(nome="Ellen")
+        db.session.add_all([a, b, c, ellen])
+        a.controle(Modulo.query.filter_by(codigo="contabil").one(), criar=True).responsavel = ellen
         db.session.commit()
         return a.id, b.id
 
@@ -24,7 +26,7 @@ def test_menu_e_cabecalho(client, empresas):
     html = client.get("/empresas").get_data(as_text=True)
     assert ">Obrigações</a>" in html
     html = client.get("/obrigacoes/?ano=2026").get_data(as_text=True)
-    cab = ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "DEFIS", "ECD", "ECF", "IBGE", "OBSERVAÇÃO"]
+    cab = ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "RESPONSÁVEL", "DEFIS", "ECD", "ECF", "IBGE", "OBSERVAÇÃO"]
     assert 'data-ordem="codigo"' in html and 'data-ordem="nome"' in html
     pos = [html.index(f">{c} <span") if i < 2 else html.index(f">{c}</th>") for i, c in enumerate(cab)]
     assert pos == sorted(pos)
@@ -35,6 +37,9 @@ def test_menu_e_cabecalho(client, empresas):
     for c in ("defis", "ecd", "ecf", "ibge", "observacao"):
         assert f'class="form-select form-select-sm filtro-campo" data-campo="{c}"' in html
     assert ">Em branco</option>" in html and ">Preenchidos</option>" in html
+    # responsável (do Contábil) com filtro
+    assert 'id="f-resp"' in html and ">— sem responsável —</option>" in html and ">Ellen</option>" in html
+    assert 'data-resp="0"' in html and ">Ellen</td>" in html
 
 
 def test_salvar_celulas(client, app, empresas):
@@ -67,7 +72,8 @@ def test_exportar_excel(client, empresas):
     client.post("/obrigacoes/salvar", data={"empresa_id": a, "ano": 2026, "campo": "defis", "valor": "2026-03-30"})
     r = client.get("/obrigacoes/exportar?ano=2026")
     ws = load_workbook(BytesIO(r.data)).active
-    assert [c.value for c in ws[1]] == ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "DEFIS", "ECD", "ECF", "IBGE",
-                                        "OBSERVAÇÃO"]
-    assert [c.value for c in ws[2]][:5] == [29, "CHAVEIRO ITALIA LTDA", "45.997.418/0001-53", "LUCRO PRESUMIDO", None]
-    assert ws["E3"].value.date() == date(2026, 3, 30) and ws["A3"].value == 46
+    assert [c.value for c in ws[1]] == ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "RESPONSÁVEL", "DEFIS", "ECD", "ECF",
+                                        "IBGE", "OBSERVAÇÃO"]
+    assert [c.value for c in ws[2]][:6] == [29, "CHAVEIRO ITALIA LTDA", "45.997.418/0001-53", "LUCRO PRESUMIDO", None,
+                                            None]
+    assert ws["F3"].value.date() == date(2026, 3, 30) and ws["A3"].value == 46 and ws["E3"].value == "Ellen"
