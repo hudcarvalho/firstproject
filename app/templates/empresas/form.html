@@ -49,11 +49,12 @@
       <label class="form-label">{{ m.rotulo_controle }} (competência)</label>
       <input type="month" class="form-control" name="concluido_{{ m.codigo }}" value="{{ (c.concluido_ate if c) | input_competencia }}">
     </div>
-    <div class="col-md-4 d-flex align-items-end">
-      <div class="form-check mb-2">
-        <input class="form-check-input" type="checkbox" name="sem_movimento_{{ m.codigo }}" id="sem-movimento-{{ m.codigo }}" {{ 'checked' if c and c.sem_movimento }}>
-        <label class="form-check-label" for="sem-movimento-{{ m.codigo }}">Sem movimento</label>
-      </div>
+    <div class="col-md-4">
+      <label class="form-label" for="situacao-{{ m.codigo }}">Situação</label>
+      <select class="form-select" name="situacao_{{ m.codigo }}" id="situacao-{{ m.codigo }}">
+        <option value="">Normal</option>
+        {% for k, r in situacoes.items() %}<option value="{{ k }}" {{ 'selected' if c and c.situacao == k }}>{{ r }}</option>{% endfor %}
+      </select>
     </div>
   </div>
   {% endfor %}

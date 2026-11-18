@@ -15,13 +15,13 @@
     <div class="small text-muted">{{ modulo.rotulo_controle }}</div>
     <div class="d-flex flex-wrap align-items-center gap-3">
       <div class="fs-5 fw-semibold">{{ (controle.concluido_ate if controle) | competencia }} {{ badge_atraso(atraso) }}
-        {% if controle and controle.sem_movimento %}<span class="badge text-bg-secondary">Sem movimento</span>{% endif %}</div>
+        {% if controle and controle.situacao %}<span class="badge {{ 'text-bg-danger' if controle.situacao != 'sem_movimento' else 'text-bg-secondary' }}">{{ controle.situacao_rotulo }}</span>{% endif %}</div>
       <form method="post" action="{{ url_for('main.empresa_controle', id=empresa.id, modulo=modulo.codigo) }}" class="d-flex gap-2 ms-auto"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
         <input type="month" class="form-control form-control-sm" name="concluido_ate" value="{{ (controle.concluido_ate if controle) | input_competencia }}">
-        <div class="form-check text-nowrap align-self-center mb-0">
-          <input class="form-check-input" type="checkbox" name="sem_movimento" id="sem-movimento" {{ 'checked' if controle and controle.sem_movimento }}>
-          <label class="form-check-label small" for="sem-movimento">Sem movimento</label>
-        </div>
+        <select class="form-select form-select-sm w-auto" name="situacao" aria-label="Situação">
+          <option value="">Normal</option>
+          {% for k, r in situacoes.items() %}<option value="{{ k }}" {{ 'selected' if controle and controle.situacao == k }}>{{ r }}</option>{% endfor %}
+        </select>
         <button class="btn btn-sm btn-primary text-nowrap">Atualizar</button>
       </form>
     </div>
