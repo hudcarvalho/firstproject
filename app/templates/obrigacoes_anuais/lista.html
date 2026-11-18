@@ -24,7 +24,7 @@
       {% for c in colunas %}
       {% if loop.index == 1 %}<th class="ordenavel ordem-ativa" data-ordem="codigo" title="Clique para ordenar por código (menor/maior)">{{ c }} <span class="seta">▲</span></th>
       {% elif loop.index == 2 %}<th class="ordenavel" data-ordem="nome" title="Clique para ordenar por empresa (A–Z / Z–A)">{{ c }} <span class="seta"></span></th>
-      {% else %}<th class="{{ 'text-center' if loop.index in (5, 6, 7, 8) }}">{{ c }}</th>{% endif %}
+      {% else %}<th class="{{ 'text-center' if loop.index in (6, 7, 8, 9) }}">{{ c }}</th>{% endif %}
       {% endfor %}
     </tr>
     <tr class="filtros">
@@ -34,6 +34,11 @@
       <th><select class="form-select form-select-sm" id="f-regime">
         <option value="">Todas</option>
         {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
+      </select></th>
+      <th><select class="form-select form-select-sm" id="f-resp" aria-label="Filtrar responsável">
+        <option value="">Todos</option>
+        <option value="0">— sem responsável —</option>
+        {% for r in responsaveis %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
       </select></th>
       {% for c in ('defis', 'ecd', 'ecf', 'ibge', 'observacao') %}
       <th><select class="form-select form-select-sm filtro-campo" data-campo="{{ c }}" aria-label="Filtrar {{ c|upper }}">
@@ -47,11 +52,12 @@
   <tbody>
     {% for e in empresas %}{% set r = registros.get(e.id) %}
     <tr data-id="{{ e.id }}" data-codigo="{{ (e.codigo or '')|lower }}" data-nome="{{ e.razao_social|lower }}"
-        data-cnpj="{{ e.cnpj }}" data-regime="{{ e.regime_id }}">
+        data-cnpj="{{ e.cnpj }}" data-regime="{{ e.regime_id }}" data-resp="{{ responsavel[e.id].id if responsavel[e.id] else 0 }}">
       <td class="text-end">{{ e.codigo or '' }}</td>
       <td style="min-width: 260px"><a href="{{ url_for('main.empresa_detalhe', id=e.id) }}" class="link-dark text-decoration-none">{{ e.razao_social }}</a></td>
       <td class="text-nowrap">{{ e.cnpj|documento }}</td>
       <td class="text-nowrap">{{ e.regime.nome|upper }}</td>
+      <td class="text-nowrap" style="min-width: 150px">{{ responsavel[e.id].nome if responsavel[e.id] else '—' }}</td>
       {% for c in ('defis', 'ecd', 'ecf', 'ibge') %}
       <td class="p-0"><input type="text" class="form-control form-control-sm celula data text-center" data-campo="{{ c }}"
           inputmode="numeric" maxlength="10" placeholder="dd/mm/aaaa" value="{{ r[c].strftime('%d/%m/%Y') if r and r[c] else '' }}"
@@ -61,7 +67,7 @@
           value="{{ r.observacao if r and r.observacao else '' }}" aria-label="Observação {{ e.razao_social }}"></td>
     </tr>
     {% else %}
-    <tr><td colspan="9" class="text-center text-muted py-4">Nenhum cliente ativo cadastrado.</td></tr>
+    <tr><td colspan="10" class="text-center text-muted py-4">Nenhum cliente ativo cadastrado.</td></tr>
     {% endfor %}
   </tbody>
 </table>
@@ -77,18 +83,21 @@
 
   // filtros
   const fCod = document.getElementById('f-codigo'), fNome = document.getElementById('f-nome'),
-        fCnpj = document.getElementById('f-cnpj'), fReg = document.getElementById('f-regime');
+        fCnpj = document.getElementById('f-cnpj'), fReg = document.getElementById('f-regime'),
+        fResp = document.getElementById('f-resp');
   const contador = document.getElementById('contador');
   const fCampos = [...document.querySelectorAll('.filtro-campo')];
   function filtrar() {
     const cod = fCod.value.trim().toLowerCase(), nome = fNome.value.trim().toLowerCase(),
-          cnpj = fCnpj.value.replace(/\D/g, ''), reg = fReg.value;
+          cnpj = fCnpj.value.replace(/\D/g, ''), reg = fReg.value, resp = fResp.value;
+    [fReg, fResp].forEach(f => f.classList.toggle('filtro-ativo', !!f.value));
     const campos = fCampos.filter(f => f.value);
     fCampos.forEach(f => f.classList.toggle('filtro-ativo', !!f.value));
     let n = 0;
     for (const tr of linhas) {
       const ok = (!cod || tr.dataset.codigo.includes(cod)) && (!nome || tr.dataset.nome.includes(nome))
         && (!cnpj || tr.dataset.cnpj.includes(cnpj)) && (!reg || tr.dataset.regime === reg)
+        && (!resp || tr.dataset.resp === resp)
         && campos.every(f => {
           const cheio = tr.querySelector(`.celula[data-campo="${f.dataset.campo}"]`).value.trim() !== '';
           return f.value === 'preenchido' ? cheio : !cheio;
@@ -99,7 +108,7 @@
     contador.textContent = `${n} de ${linhas.length} clientes`;
   }
   [fCod, fNome, fCnpj].forEach(i => i.addEventListener('input', filtrar));
-  [fReg, ...fCampos].forEach(s => s.addEventListener('change', filtrar));
+  [fReg, fResp, ...fCampos].forEach(s => s.addEventListener('change', filtrar));
   filtrar();
 
   // ordenação: clique em CÓDIGO ou EMPRESA (de novo inverte)

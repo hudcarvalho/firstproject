@@ -7,11 +7,11 @@ from io import BytesIO
 from flask import Blueprint, abort, jsonify, render_template, request, send_file
 
 from .competencia import fmt_documento
-from .models import Empresa, ObrigacaoAnual, db
+from .models import Empresa, Modulo, ObrigacaoAnual, db
 
 bp = Blueprint("obrigacoes_anuais", __name__, url_prefix="/obrigacoes")
 
-COLUNAS = ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "DEFIS", "ECD", "ECF", "IBGE", "OBSERVAÇÃO"]
+COLUNAS = ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "RESPONSÁVEL", "DEFIS", "ECD", "ECF", "IBGE", "OBSERVAÇÃO"]
 CAMPOS = ObrigacaoAnual.CAMPOS_DATA + ("observacao",)
 
 
@@ -28,6 +28,17 @@ def _ordem_codigo(e):
     return (0, int(c), "") if c.isdigit() else (1 if c else 2, 0, c.lower() or e.razao_social.lower())
 
 
+def _modulo_responsavel():
+    """Módulo de onde vem o responsável: o Contábil (ou o primeiro módulo ativo)."""
+    ativos = Modulo.ativos()
+    return next((m for m in ativos if m.codigo == "contabil"), ativos[0] if ativos else None)
+
+
+def _responsavel(empresa, modulo):
+    c = empresa.controle(modulo) if modulo else None
+    return c.responsavel if c and c.responsavel else None
+
+
 def _dados(ano, inativas=False):
     q = Empresa.query
     if not inativas:
@@ -42,8 +53,11 @@ def lista():
     ano = _ano()
     empresas, registros = _dados(ano)
     regimes = sorted({e.regime for e in empresas}, key=lambda r: r.nome.lower())
+    modulo = _modulo_responsavel()
+    responsavel = {e.id: _responsavel(e, modulo) for e in empresas}
+    responsaveis = sorted({r for r in responsavel.values() if r}, key=lambda r: r.nome.lower())
     return render_template("obrigacoes_anuais/lista.html", ano=ano, empresas=empresas, registros=registros,
-                           regimes=regimes, colunas=COLUNAS, anos=range(date.today().year + 1, 2019, -1))
+                           regimes=regimes, responsavel=responsavel, responsaveis=responsaveis, colunas=COLUNAS, anos=range(date.today().year + 1, 2019, -1))
 
 
 def _data(texto):
@@ -109,19 +123,21 @@ def exportar():
         c.font = Font(bold=True)
         c.fill = PatternFill("solid", fgColor="D9D9D9")
         c.border = Border(top=fino, bottom=fino, left=fino, right=fino)
+    modulo = _modulo_responsavel()
     for e in empresas:
         r = registros.get(e.id)
+        resp = _responsavel(e, modulo)
         codigo = int(e.codigo) if (e.codigo or "").strip().isdigit() else e.codigo
-        ws.append([codigo, e.razao_social, fmt_documento(e.cnpj), e.regime.nome.upper()]
+        ws.append([codigo, e.razao_social, fmt_documento(e.cnpj), e.regime.nome.upper(), resp.nome if resp else None]
                   + [getattr(r, c) if r else None for c in ObrigacaoAnual.CAMPOS_DATA]
                   + [r.observacao if r else None])
-        for col in range(5, 9):
+        for col in range(6, 10):
             ws.cell(ws.max_row, col).number_format = "DD/MM/YYYY"
-    for letra, largura in zip("ABCDEFGHI", (9, 45, 20, 16, 12, 12, 12, 12, 40)):
+    for letra, largura in zip("ABCDEFGHIJ", (9, 45, 20, 16, 18, 12, 12, 12, 12, 40)):
         ws.column_dimensions[letra].width = largura
     ws.freeze_panes = "A2"
     ws.auto_filter.ref = ws.dimensions
-    for col in "EFGH":
+    for col in "FGHI":
         ws[f"{col}1"].alignment = Alignment(horizontal="center")
     buf = BytesIO()
     wb.save(buf)
