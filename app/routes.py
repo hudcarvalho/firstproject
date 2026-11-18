@@ -179,10 +179,20 @@ def _form_empresa(empresa):
         controle.responsavel_id = _int_or_none(f.get(f"responsavel_{m.codigo}"))
         bruto = f.get(f"concluido_{m.codigo}")
         controle.concluido_ate = parse_competencia(bruto)
-        controle.sem_movimento = f.get(f"sem_movimento_{m.codigo}") == "on"
+        controle.situacao = _situacao(f, f"situacao_{m.codigo}", f"sem_movimento_{m.codigo}")
         if bruto and controle.concluido_ate is None:
             erros.append(f"{m.nome}: competência inválida em “{m.rotulo_controle}”.")
     return erros
+
+
+def _situacao(form, campo, campo_legado=None):
+    """Situação escolhida (sem_movimento/ex_cliente/encerrada) ou None; aceita a antiga caixa "Sem movimento"."""
+    valor = form.get(campo)
+    if valor in EmpresaModulo.SITUACOES:
+        return valor
+    if valor is None and campo_legado and form.get(campo_legado) == "on":
+        return "sem_movimento"
+    return None
 
 
 def _render_form_empresa(empresa):
@@ -274,17 +284,17 @@ def empresa_controle(id, modulo):
     modulo = _modulo(modulo)
     bruto = request.form.get("concluido_ate")
     comp = parse_competencia(bruto)
-    sem_movimento = request.form.get("sem_movimento") == "on"
-    if comp is None and (bruto or not sem_movimento):
+    situacao = _situacao(request.form, "situacao", "sem_movimento")
+    if comp is None and (bruto or not situacao):
         flash("Competência inválida.", "danger")
     else:
         controle = empresa.controle(modulo, criar=True)
         if comp:
             controle.concluido_ate = comp
-        controle.sem_movimento = sem_movimento
+        controle.situacao = situacao
         db.session.commit()
         partes = [f"{modulo.rotulo_controle} {comp:%m/%Y}"] if comp else []
-        partes.append("sem movimento" if sem_movimento else "com movimento")
+        partes.append(EmpresaModulo.SITUACOES[situacao].lower() if situacao else "situação normal")
         flash(", ".join(partes).capitalize() + ".", "success")
     return redirect(url_for("main.empresa_modulo", id=id, modulo=modulo.codigo))
 

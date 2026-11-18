@@ -250,13 +250,24 @@ class EmpresaModulo(db.Model):
     modulo_id = db.Column(db.Integer, db.ForeignKey("modulo.id"), nullable=False)
     responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
     concluido_ate = db.Column(db.Date)  # competência (dia 1 do mês)
-    sem_movimento = db.Column(db.Boolean, nullable=False, default=False, server_default=db.false())
+    # situação além da competência: sem movimento, ex-cliente ou encerrada (None = normal)
+    situacao = db.Column(db.String(20))
+
+    SITUACOES = {"sem_movimento": "Sem movimento", "ex_cliente": "Ex-Cliente", "encerrada": "Encerrada"}
 
     empresa = db.relationship("Empresa", back_populates="controles")
     modulo = db.relationship("Modulo")
     responsavel = db.relationship("Responsavel", back_populates="controles")
 
     __table_args__ = (db.UniqueConstraint("empresa_id", "modulo_id"),)
+
+    @property
+    def sem_movimento(self):
+        return self.situacao == "sem_movimento"
+
+    @property
+    def situacao_rotulo(self):
+        return self.SITUACOES.get(self.situacao or "", "")
 
     def meses_atrasados(self, hoje=None):
         """Quantos meses faltam concluir até o mês anterior a hoje."""

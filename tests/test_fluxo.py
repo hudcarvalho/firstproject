@@ -236,14 +236,15 @@ def test_lista_clientes_mostra_escriturada_ate(client, app):
 def test_sem_movimento(client, app):
     eid = _cadastrar(client, app)
     html = client.get("/empresas").get_data(as_text=True)
-    assert '<option value="sm">Sem movimento</option>' in html and 'data-semmovcontabil="0"' in html
+    assert '<option value="sm">Sem movimento</option>' in html and 'data-sitcontabil=""' in html
+    assert '<option value="ex">Ex-Cliente</option>' in html and '<option value="enc">Encerrada</option>' in html
     # marcar sem informar competência mantém a data já gravada
     client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "", "sem_movimento": "on"})
     with app.app_context():
         c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
         assert c.sem_movimento and c.concluido_ate == date(2026, 6, 1)
     html = client.get("/empresas").get_data(as_text=True)
-    assert 'data-semmovcontabil="1"' in html
+    assert 'data-sitcontabil="sm"' in html
     assert "Sem movimento</span>" in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
     # sem competência e sem marcar: erro, nada muda
     client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": ""})
@@ -253,6 +254,25 @@ def test_sem_movimento(client, app):
     with app.app_context():
         c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
         assert not c.sem_movimento and c.concluido_ate == date(2026, 7, 1)
+
+
+def test_ex_cliente_e_encerrada(client, app):
+    eid = _cadastrar(client, app)
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "", "situacao": "ex_cliente"})
+    with app.app_context():
+        c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
+        assert c.situacao == "ex_cliente" and c.concluido_ate == date(2026, 6, 1) and not c.sem_movimento
+    assert 'data-sitcontabil="ex"' in client.get("/empresas").get_data(as_text=True)
+    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert "Ex-Cliente</span>" in html and '<option value="encerrada" >Encerrada</option>' in html.replace("  ", " ")
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "", "situacao": "encerrada"})
+    assert 'data-sitcontabil="enc"' in client.get("/empresas").get_data(as_text=True)
+    # "Normal" volta ao normal (com competência)
+    client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "2026-07", "situacao": ""})
+    with app.app_context():
+        assert db.session.get(Empresa, eid).controle(_modulo("contabil")).situacao is None
+    # no formulário de cadastro também
+    assert 'name="situacao_contabil"' in client.get(f"/empresas/{eid}/editar").get_data(as_text=True)
 
 
 def test_botao_voltar_aos_clientes(client, app):
