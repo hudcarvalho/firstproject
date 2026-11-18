@@ -15,6 +15,7 @@
 <div class="d-flex align-items-center gap-3 mb-2 small">
   <span class="text-muted">Digite direto na tabela: cada campo é salvo ao sair dele (Enter desce para a linha de baixo).</span>
   <span class="ms-auto text-muted" id="contador"></span>
+  <button type="button" class="btn btn-sm btn-outline-secondary d-none" id="limpar-filtros">✕ Limpar filtros</button>
   <span id="status-salvar" class="small"></span>
 </div>
 <div class="card"><div class="table-responsive planilha">
@@ -107,9 +108,15 @@
       if (ok) n++;
     }
     contador.textContent = `${n} de ${linhas.length} clientes`;
+    const algum = [fCod, fNome, fCnpj, fReg, fResp, ...fCampos].some(f => f.value.trim() !== '');
+    document.getElementById('limpar-filtros').classList.toggle('d-none', !algum);
   }
   [fCod, fNome, fCnpj].forEach(i => i.addEventListener('input', filtrar));
   [fReg, fResp, ...fCampos].forEach(s => s.addEventListener('change', filtrar));
+  document.getElementById('limpar-filtros').addEventListener('click', () => {
+    [fCod, fNome, fCnpj, fReg, fResp, ...fCampos].forEach(f => { f.value = ''; });
+    filtrar();
+  });
   filtrar();
 
   // ordenação: clique em CÓDIGO ou EMPRESA (de novo inverte)

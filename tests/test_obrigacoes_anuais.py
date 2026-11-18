@@ -38,6 +38,7 @@ def test_menu_e_cabecalho(client, empresas):
         assert f'class="form-select form-select-sm filtro-campo" data-campo="{c}"' in html
     assert ">Em branco</option>" in html and ">Preenchidos</option>" in html
     # responsável (do Contábil) com filtro
+    assert 'id="limpar-filtros"' in html and "Limpar filtros" in html
     assert 'id="f-resp"' in html and ">— sem responsável —</option>" in html and ">Ellen</option>" in html
     assert 'data-resp="0"' in html and ">Ellen</td>" in html
 
