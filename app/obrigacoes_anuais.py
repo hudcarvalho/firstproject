@@ -4,7 +4,7 @@ import re
 from datetime import date, datetime
 from io import BytesIO
 
-from flask import Blueprint, abort, jsonify, render_template, request, send_file
+from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
 from .competencia import fmt_documento
 from .models import Empresa, Modulo, ObrigacaoAnual, db
@@ -144,3 +144,67 @@ def exportar():
     buf.seek(0)
     return send_file(buf, as_attachment=True, download_name=f"obrigacoes_{ano}.xlsx",
                      mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
+# ---------------------------------------------------------------- importar recibos de entrega
+
+@bp.route("/importar", methods=["GET", "POST"])
+def importar():
+    """Recibos (PDFs ou .zip) → prévia com empresa, declaração e data; nada é gravado ainda.
+    Os arquivos são lidos na hora e não ficam guardados no servidor."""
+    from . import recibos
+
+    if request.method == "GET":
+        return render_template("obrigacoes_anuais/importar.html", previa=None, tipos=recibos.TIPOS)
+    arquivos = recibos.arquivos_enviados(request.files.getlist("arquivos"))
+    if not arquivos:
+        flash("Escolha os recibos em PDF ou uma pasta compactada (.zip) com os PDFs.", "warning")
+        return redirect(url_for("obrigacoes_anuais.importar"))
+    empresas = {e.cnpj: e for e in Empresa.query.all()}
+    lidos = [recibos.ler_pdf(nome, conteudo) for nome, conteudo in arquivos]
+    linhas = []
+    for r in lidos:
+        empresa = empresas.get(r.cnpj) if r.cnpj else None
+        erro = r.erro or (None if empresa else "CNPJ não cadastrado no sistema")
+        linhas.append({"r": r, "empresa": empresa, "erro": erro, "ano": r.data.year if r.data else None})
+    # mesmo cliente e declaração mais de uma vez no lote: vale o recibo mais recente
+    validas = [l for l in linhas if not l["erro"]]
+    mais_recente = {}
+    for l in validas:
+        chave = (l["empresa"].id, l["r"].tipo, l["ano"])
+        if chave not in mais_recente or l["r"].data > mais_recente[chave]["r"].data:
+            mais_recente[chave] = l
+    for l in validas:
+        if mais_recente[(l["empresa"].id, l["r"].tipo, l["ano"])] is not l:
+            l["erro"] = "há recibo mais recente desta declaração no lote"
+    atuais = {(o.empresa_id, o.ano): o for o in ObrigacaoAnual.query.filter(
+        ObrigacaoAnual.empresa_id.in_([l["empresa"].id for l in mais_recente.values()] or [0]))}
+    for l in mais_recente.values():
+        reg = atuais.get((l["empresa"].id, l["ano"]))
+        l["atual"] = getattr(reg, l["r"].tipo) if reg else None
+    linhas.sort(key=lambda l: (bool(l["erro"]), l["empresa"].razao_social if l["empresa"] else "", l["r"].tipo or ""))
+    return render_template("obrigacoes_anuais/importar.html", previa=linhas, tipos=recibos.TIPOS,
+                           validas=sum(1 for l in linhas if not l["erro"]))
+
+
+@bp.post("/importar/confirmar")
+def importar_confirmar():
+    gravados, anos = 0, set()
+    for item in request.form.getlist("item"):
+        try:
+            empresa_id, campo, data_iso = item.split("|")
+            empresa_id, quando = int(empresa_id), date.fromisoformat(data_iso)
+        except ValueError:
+            continue
+        if campo not in ObrigacaoAnual.CAMPOS_DATA or db.session.get(Empresa, empresa_id) is None:
+            continue
+        reg = ObrigacaoAnual.query.filter_by(empresa_id=empresa_id, ano=quando.year).first()
+        if reg is None:
+            reg = ObrigacaoAnual(empresa_id=empresa_id, ano=quando.year)
+            db.session.add(reg)
+        setattr(reg, campo, quando)
+        gravados += 1
+        anos.add(quando.year)
+    db.session.commit()
+    flash(f"{gravados} data(s) de entrega gravada(s) a partir dos recibos.", "success")
+    return redirect(url_for("obrigacoes_anuais.lista", ano=max(anos) if anos else None))
