@@ -120,6 +120,9 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   (CÓDIGO, EMPRESA, CNPJ, TRIBUTAÇÃO, DEFIS, ECD, ECF, IBGE, OBSERVAÇÃO), por ano. As datas e a
   observação são digitadas direto na tabela e salvas ao sair do campo; filtros por código, nome,
   CNPJ e tributação e exportação em Excel no mesmo formato.
+  **Importar recibos**: PDFs ou .zip com os recibos da DEFIS, ECD, ECF e o comprovante do IBGE
+  (inclusive impresso sem texto) — o sistema identifica pelo conteúdo a declaração, a empresa
+  (CNPJ) e a data da entrega, mostra a prévia e grava a data no ano da entrega.
 - **Converter Excel em TXT** (*Ferramentas → Converter Excel em TXT*): planilha de lançamentos
   (Data | conta débito | conta crédito | Lançamento | Valor | Participante) vira o TXT de importação
   `sequência,data,débito,crédito,valor,código,histórico,,participante` (ex.:

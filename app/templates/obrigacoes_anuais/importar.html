@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block title %}Importar recibos{% endblock %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+  <h1 class="h3 mb-0">Importar recibos de entrega</h1>
+  <a class="btn btn-sm btn-outline-secondary" href="{{ url_for('obrigacoes_anuais.lista') }}">← Obrigações</a>
+</div>
+
+<form method="post" enctype="multipart/form-data" class="card mb-4" style="max-width: 820px" id="form-recibos">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-body">
+    <label class="form-label" for="arquivos">Recibos em PDF ou pasta compactada (.zip)</label>
+    <input class="form-control" type="file" name="arquivos" id="arquivos" accept=".pdf,.zip,application/pdf,application/zip" multiple required>
+    <div class="form-text">Pode escolher vários PDFs de uma vez ou um .zip (com subpastas). O sistema reconhece pelo
+      <strong>conteúdo</strong> (o nome do arquivo é ignorado) os recibos da <strong>DEFIS</strong>, <strong>ECD</strong>,
+      <strong>ECF</strong> e o comprovante de entrega do <strong>IBGE</strong>, encontra a empresa pelo CNPJ e pega a data da entrega.
+      A data vai para o ano em que a declaração foi entregue e substitui a que estiver na tabela. Antes de gravar, você confere a prévia.
+      Os arquivos são lidos na hora e não ficam guardados no sistema.</div>
+  </div>
+  <div class="card-footer d-flex align-items-center gap-3">
+    <button class="btn btn-primary">Ler recibos</button>
+    <span class="small text-muted d-none" id="lendo">Lendo os recibos… muitos arquivos podem levar alguns segundos.</span>
+  </div>
+</form>
+
+{% if previa is not none %}
+<form method="post" action="{{ url_for('obrigacoes_anuais.importar_confirmar') }}" class="card">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <div class="card-header d-flex flex-wrap justify-content-between align-items-center gap-2">
+    <strong>Prévia: {{ previa|length }} arquivo(s) · {{ validas }} data(s) para gravar</strong>
+    <button class="btn btn-success btn-sm" {{ 'disabled' if not validas }}>Gravar {{ validas }} data(s)</button>
+  </div>
+  <div class="table-responsive">
+  <table class="table table-sm align-middle mb-0">
+    <thead class="table-light"><tr><th>Arquivo</th><th>Declaração</th><th>Código</th><th>Empresa</th><th>CNPJ</th>
+      <th>Entregue em</th><th>Ano</th><th>Situação</th></tr></thead>
+    <tbody>
+    {% for l in previa %}{% set r = l.r %}
+      <tr class="{{ 'table-warning' if l.erro }}">
+        <td class="small text-muted">{{ r.arquivo }}</td>
+        <td>{{ tipos[r.tipo] if r.tipo else '—' }}</td>
+        <td class="text-end">{{ l.empresa.codigo or '' if l.empresa }}</td>
+        <td>{{ l.empresa.razao_social if l.empresa else '—' }}</td>
+        <td class="text-nowrap">{{ r.cnpj | documento if r.cnpj else '—' }}</td>
+        <td>{{ r.data | data_br if r.data else '—' }}</td>
+        <td>{{ l.ano or '—' }}</td>
+        <td class="small">
+          {% if l.erro %}⚠ {{ l.erro }}
+          {% else %}
+            <input type="hidden" name="item" value="{{ l.empresa.id }}|{{ r.tipo }}|{{ r.data.isoformat() }}">
+            {% if l.atual and l.atual != r.data %}<span class="text-primary">substitui {{ l.atual | data_br }}</span>
+            {% elif l.atual %}<span class="text-muted">já estava com esta data</span>
+            {% else %}<span class="text-success">novo</span>{% endif %}
+            {% if not l.empresa.ativo %}<span class="badge text-bg-secondary">empresa inativa</span>{% endif %}
+          {% endif %}
+        </td>
+      </tr>
+    {% endfor %}
+    </tbody>
+  </table>
+  </div>
+</form>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+document.getElementById('form-recibos').addEventListener('submit', () => document.getElementById('lendo').classList.remove('d-none'));
+</script>
+{% endblock %}
