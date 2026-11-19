@@ -404,3 +404,33 @@ def test_observacoes_na_tela_da_empresa(client, app):
     client.post(f"/empresas/{eid}/contabil/observacoes", data={"observacoes": "   "})
     with app.app_context():
         assert db.session.get(Empresa, eid).observacoes is None
+
+
+def test_limpar_observacoes(client, app):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    eid = _cadastrar(client, app)
+    with app.app_context():
+        db.session.get(Empresa, eid).observacoes = "Observação antiga"
+        db.session.commit()
+    html = client.get("/clientes/observacoes").get_data(as_text=True)
+    assert "1 cliente(s)" in html and "Observação antiga" in html
+    ws = load_workbook(BytesIO(client.get("/clientes/observacoes?formato=xlsx").data)).active
+    assert [c.value for c in ws[2]][1:] == ["ACME Ltda", "11.222.333/0001-81", "Observação antiga"]
+    # sem digitar APAGAR: nada muda
+    client.post("/clientes/observacoes", data={"confirmacao": "sim"})
+    with app.app_context():
+        assert db.session.get(Empresa, eid).observacoes == "Observação antiga"
+    client.post("/clientes/observacoes", data={"confirmacao": "apagar"})
+    with app.app_context():
+        assert db.session.get(Empresa, eid).observacoes is None
+    assert "Nenhum cliente tem observação" in client.get("/clientes/observacoes").get_data(as_text=True)
+
+
+def test_limpar_observacoes_so_admin(client, app):
+    from tests.conftest import criar_usuario, entrar
+    criar_usuario(app, "comum@escritorio.com", admin=False)
+    c = app.test_client()
+    entrar(c, "comum@escritorio.com")
+    assert c.get("/clientes/observacoes").status_code == 403
+    assert c.post("/clientes/observacoes", data={"confirmacao": "APAGAR"}).status_code == 403
