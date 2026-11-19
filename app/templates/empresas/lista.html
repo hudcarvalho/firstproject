@@ -110,6 +110,12 @@
     });
   });
   const filtros = Array.from(document.querySelectorAll('.filtro'));
+  const fSituacao = document.getElementById('f-situacao');
+  // filtros das colunas: seleção múltipla (como no Excel); "Mostrar" continua com uma opção só
+  filtros.filter(f => f.tagName === 'SELECT' && f !== fSituacao).forEach(f => FiltroMulti.criar(f));
+  const multiplos = f => f.tagName === 'SELECT' && f !== fSituacao;
+  const valorDe = f => (multiplos(f) ? FiltroMulti.valores(f) : (f.value.trim() || null));
+  const temFiltro = f => { const v = valorDe(f); return Array.isArray(v) ? true : !!v; };
   const fCodigo = document.getElementById('f-codigo');
   const fNome = document.getElementById('f-nome');
   const fCnpj = document.getElementById('f-cnpj');
@@ -142,6 +148,16 @@
   let espera;
   [caixa, window].forEach(alvo => alvo.addEventListener('scroll', () => { clearTimeout(espera); espera = setTimeout(lembrar, 150); }));
 
+  function confere(l, campo, v) {
+    if (['sm', 'ex', 'enc'].includes(v)) {  // "Escriturada até" → Sem movimento / Ex-Cliente / Encerrada
+      return l.dados['sit' + campo.slice(4)] === v;
+    }
+    if (v === '0' && campo.startsWith('conc')) {  // em branco de verdade: sem data e sem situação
+      return l.dados[campo] === '0' && !l.dados['sit' + campo.slice(4)];
+    }
+    return l.dados[campo] === v;
+  }
+
   function aplicar() {
     const codigo = normalizar(fCodigo.value.trim());
     const nome = normalizar(fNome.value.trim());
@@ -153,35 +169,34 @@
         && (!cnpj || l.dados.cnpj.includes(cnpj));              // CNPJ: contém os dígitos
       for (const s of selects) {
         if (!ok) break;
-        const v = s.value;
-        if (s.dataset.campo === 'situacao') {
+        if (s === fSituacao) {
+          const v = s.value;
           ok = v === 'todas' || l.dados.situacao === (v || 'ativa');
-        } else if (['sm', 'ex', 'enc'].includes(v)) {  // "Escriturada até" → Sem movimento / Ex-Cliente / Encerrada
-          ok = l.dados['sit' + s.dataset.campo.slice(4)] === v;
-        } else if (v === '0' && s.dataset.campo.startsWith('conc')) {  // em branco de verdade: sem data e sem situação
-          ok = l.dados[s.dataset.campo] === '0' && !l.dados['sit' + s.dataset.campo.slice(4)];
-        } else if (v !== '') {
-          ok = l.dados[s.dataset.campo] === v;
+          continue;
         }
+        const marcados = FiltroMulti.valores(s);
+        if (marcados) ok = marcados.some(v => confere(l, s.dataset.campo, v));  // basta uma das opções marcadas
       }
       l.tr.classList.toggle('d-none', !ok);
       if (ok) visiveis++;
     }
     vazio.classList.toggle('d-none', visiveis > 0);
-    const algumFiltro = filtros.some(f => f.value.trim() !== '');
+    const algumFiltro = filtros.some(temFiltro);
     contador.textContent = algumFiltro ? plural(visiveis) + ' de ' + linhas.length : plural(visiveis) + ' ativos';
     limpar.classList.toggle('d-none', !algumFiltro);
-    const grupo = document.getElementById('f-grupo').value, atalho = document.getElementById('lucro-grupo');
+    const grupos = FiltroMulti.valores(document.getElementById('f-grupo'));
+    const grupo = grupos && grupos.length === 1 ? grupos[0] : '', atalho = document.getElementById('lucro-grupo');
     atalho.classList.toggle('d-none', !grupo || grupo === '0');
     if (grupo && grupo !== '0') atalho.href = atalho.href.split('?')[0] + '?grupo=' + grupo;
-    filtros.forEach(f => f.classList.toggle('filtro-ativo', f.value.trim() !== ''));
+    filtros.forEach(f => f.classList.toggle('filtro-ativo', temFiltro(f)));
 
     // guarda os filtros no endereço, para continuarem ao voltar à página
     const url = new URL(location);
     ['inativas', 'q'].forEach(p => url.searchParams.delete(p));
     for (const f of filtros) {
-      const v = f.value.trim();
-      v ? url.searchParams.set(f.dataset.param, v) : url.searchParams.delete(f.dataset.param);
+      const v = valorDe(f);
+      const texto = Array.isArray(v) ? (v.length ? v.join(',') : '-') : (v || '');  // "-" = nenhuma marcada
+      texto ? url.searchParams.set(f.dataset.param, texto) : url.searchParams.delete(f.dataset.param);
     }
     history.replaceState(null, '', url);
     lembrar();
@@ -250,7 +265,7 @@
   });
   limpar.addEventListener('click', e => {
     e.preventDefault();
-    filtros.forEach(f => { f.value = ''; });
+    filtros.forEach(f => (multiplos(f) ? FiltroMulti.definir(f, null) : (f.value = '')));
     aplicar();
   });
 
@@ -259,7 +274,8 @@
   for (const f of filtros) {
     const v = params.get(f.dataset.param);
     if (v === null) continue;
-    if (f.tagName === 'INPUT' || Array.from(f.options).some(o => o.value === v)) f.value = v;
+    if (multiplos(f)) FiltroMulti.definir(f, v === '-' ? [] : v.split(','));
+    else if (f.tagName === 'INPUT' || Array.from(f.options).some(o => o.value === v)) f.value = v;
   }
   if (comparadores[(params.get('ordem') || '').replace('-', '')]) ordem = params.get('ordem');
   ordenar();

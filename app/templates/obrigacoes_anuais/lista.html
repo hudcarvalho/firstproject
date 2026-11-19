@@ -89,32 +89,34 @@
         fResp = document.getElementById('f-resp');
   const contador = document.getElementById('contador');
   const fCampos = [...document.querySelectorAll('.filtro-campo')];
+  const selecoes = [fReg, fResp, ...fCampos];
+  selecoes.forEach(f => FiltroMulti.criar(f));  // seleção múltipla, como no Excel
   function filtrar() {
     const cod = fCod.value.trim().toLowerCase(), nome = fNome.value.trim().toLowerCase(),
-          cnpj = fCnpj.value.replace(/\D/g, ''), reg = fReg.value, resp = fResp.value;
-    [fReg, fResp].forEach(f => f.classList.toggle('filtro-ativo', !!f.value));
-    const campos = fCampos.filter(f => f.value);
-    fCampos.forEach(f => f.classList.toggle('filtro-ativo', !!f.value));
+          cnpj = fCnpj.value.replace(/\D/g, '');
+    const reg = FiltroMulti.valores(fReg), resp = FiltroMulti.valores(fResp);
+    const campos = fCampos.map(f => [f.dataset.campo, FiltroMulti.valores(f)]).filter(([, v]) => v);
     let n = 0;
     for (const tr of linhas) {
       const ok = (!cod || tr.dataset.codigo.includes(cod)) && (!nome || tr.dataset.nome.includes(nome))
-        && (!cnpj || tr.dataset.cnpj.includes(cnpj)) && (!reg || tr.dataset.regime === reg)
-        && (!resp || tr.dataset.resp === resp)
-        && campos.every(f => {
-          const cheio = tr.querySelector(`.celula[data-campo="${f.dataset.campo}"]`).value.trim() !== '';
-          return f.value === 'preenchido' ? cheio : !cheio;
+        && (!cnpj || tr.dataset.cnpj.includes(cnpj)) && (!reg || reg.includes(tr.dataset.regime))
+        && (!resp || resp.includes(tr.dataset.resp))
+        && campos.every(([campo, marcados]) => {
+          const cheio = tr.querySelector(`.celula[data-campo="${campo}"]`).value.trim() !== '';
+          return marcados.includes(cheio ? 'preenchido' : 'vazio');
         });
       tr.classList.toggle('d-none', !ok);
       if (ok) n++;
     }
     contador.textContent = `${n} de ${linhas.length} clientes`;
-    const algum = [fCod, fNome, fCnpj, fReg, fResp, ...fCampos].some(f => f.value.trim() !== '');
+    const algum = [fCod, fNome, fCnpj].some(f => f.value.trim() !== '') || selecoes.some(f => FiltroMulti.valores(f));
     document.getElementById('limpar-filtros').classList.toggle('d-none', !algum);
   }
   [fCod, fNome, fCnpj].forEach(i => i.addEventListener('input', filtrar));
-  [fReg, fResp, ...fCampos].forEach(s => s.addEventListener('change', filtrar));
+  selecoes.forEach(s => s.addEventListener('change', filtrar));
   document.getElementById('limpar-filtros').addEventListener('click', () => {
-    [fCod, fNome, fCnpj, fReg, fResp, ...fCampos].forEach(f => { f.value = ''; });
+    [fCod, fNome, fCnpj].forEach(f => { f.value = ''; });
+    selecoes.forEach(f => FiltroMulti.definir(f, null));
     filtrar();
   });
   filtrar();
