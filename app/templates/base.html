@@ -48,7 +48,7 @@
         </li>
         {% if current_user.admin %}
         <li class="nav-item dropdown">
-          <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep or 'importar' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
+          <a class="nav-link dropdown-toggle {{ 'active' if 'regime' in ep or 'responsav' in ep or 'modulo' in ep or 'usuario' in ep or 'importar' in ep or 'observacoes_limpar' in ep }}" href="#" data-bs-toggle="dropdown">Cadastros</a>
           <ul class="dropdown-menu">
             <li><a class="dropdown-item" href="{{ url_for('main.regimes_lista') }}">Regimes tributários</a></li>
             <li><a class="dropdown-item" href="{{ url_for('main.responsaveis_lista') }}">Responsáveis</a></li>
@@ -57,6 +57,7 @@
             <li><a class="dropdown-item" href="{{ url_for('auth.usuarios_lista') }}">Usuários</a></li>
             <li><hr class="dropdown-divider"></li>
             <li><a class="dropdown-item" href="{{ url_for('main.importar') }}">Importar clientes</a></li>
+            <li><a class="dropdown-item" href="{{ url_for('main.observacoes_limpar') }}">Limpar observações dos clientes</a></li>
           </ul>
         </li>
         {% endif %}

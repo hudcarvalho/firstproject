@@ -23,6 +23,7 @@ ENDPOINTS_ADMIN = {
     "main.responsaveis_lista", "main.responsavel_form", "main.modulos_lista", "main.modulo_form",
     "auth.usuarios_lista", "auth.usuario_form",
     "main.importar", "main.importar_previa", "main.importar_confirmar",
+    "main.observacoes_limpar",
 }
 ENDPOINTS_ADMIN_SO_POST = {"main.matriz"}  # qualquer um vê; só admin salva
 

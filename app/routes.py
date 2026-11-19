@@ -629,3 +629,46 @@ def importar_confirmar(token):
         partes.append(f"{resultado['erros']} com erro não importada(s)")
     flash("Importação concluída: " + ", ".join(partes) + ".", "success")
     return redirect(url_for("main.empresas_lista"))
+
+
+# ---------------------------------------------------------------- limpar observações (administradores)
+
+@bp.route("/clientes/observacoes", methods=["GET", "POST"])
+def observacoes_limpar():
+    """Apaga as observações do cadastro de todos os clientes (com cópia em Excel antes, se quiser)."""
+    com_obs = (Empresa.query.filter(Empresa.observacoes.isnot(None), Empresa.observacoes != "")
+               .order_by(Empresa.razao_social).all())
+    if request.args.get("formato") == "xlsx":
+        from io import BytesIO
+
+        from flask import send_file
+        from openpyxl import Workbook
+        from openpyxl.styles import Alignment, Font
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = "Observações"
+        ws.append(["Código", "Razão social", "CNPJ", "Observação"])
+        for c in ws[1]:
+            c.font = Font(bold=True)
+        for e in com_obs:
+            ws.append([int(e.codigo) if (e.codigo or "").isdigit() else e.codigo, e.razao_social, e.cnpj_formatado,
+                       e.observacoes])
+            ws.cell(ws.max_row, 4).alignment = Alignment(wrap_text=True, vertical="top")
+        for letra, largura in zip("ABCD", (9, 45, 20, 80)):
+            ws.column_dimensions[letra].width = largura
+        buf = BytesIO()
+        wb.save(buf)
+        buf.seek(0)
+        return send_file(buf, as_attachment=True, download_name=f"observacoes_clientes_{date.today():%Y-%m-%d}.xlsx",
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    if request.method == "POST":
+        if (request.form.get("confirmacao") or "").strip().upper() != "APAGAR":
+            flash("Para apagar, digite APAGAR na caixa de confirmação.", "warning")
+            return redirect(url_for("main.observacoes_limpar"))
+        for e in com_obs:
+            e.observacoes = None
+        db.session.commit()
+        flash(f"Observações apagadas de {len(com_obs)} cliente(s).", "success")
+        return redirect(url_for("main.observacoes_limpar"))
+    return render_template("empresas/observacoes_limpar.html", empresas=com_obs)
