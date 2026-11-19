@@ -43,3 +43,8 @@ body { background: #f5f6f8; }
 .filtro-multi-menu .dropdown-item { cursor: pointer; white-space: normal; }
 .filtro-multi-menu .dropdown-item:active { background-color: #e9ecef; color: inherit; }
 .filtro-multi > .form-select.filtro-ativo { border-color: #0d6efd; background-color: #eef4ff; }
+
+/* Lista de clientes: linha em azul quando o cadastro tem observação (passar o mouse mostra o texto) */
+.planilha tr.com-observacao > td { background-color: #dbeafe; }
+.planilha tr.com-observacao:hover > td { background-color: #c7dcfb; }
+.planilha tr.com-observacao > td:first-child { box-shadow: inset 4px 0 0 #0d6efd; }

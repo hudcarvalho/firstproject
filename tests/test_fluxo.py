@@ -398,6 +398,9 @@ def test_observacoes_na_tela_da_empresa(client, app):
     with app.app_context():
         assert db.session.get(Empresa, eid).observacoes == "Sócio prefere contato por e-mail.\nECD com termo especial."
     assert "ECD com termo especial." in client.get(f"/empresas/{eid}").get_data(as_text=True)
+    # na lista de clientes a linha fica destacada, com a observação ao passar o mouse
+    html = client.get("/empresas").get_data(as_text=True)
+    assert 'class="linha-cliente com-observacao" title="Observação: Sócio prefere contato por e-mail.' in html
     client.post(f"/empresas/{eid}/contabil/observacoes", data={"observacoes": "   "})
     with app.app_context():
         assert db.session.get(Empresa, eid).observacoes is None
