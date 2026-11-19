@@ -18,12 +18,12 @@ def empresa_lr(app):
 
 
 def test_aba_so_no_lucro_real(client, app, empresa_lr):
-    assert ">LALUR<" in client.get(f"/empresas/{empresa_lr}/contabil").get_data(as_text=True)
+    assert ">LALUR<" in client.get(f"/empresas/{empresa_lr}").get_data(as_text=True)
     with app.app_context():
         e = db.session.get(Empresa, empresa_lr)
         e.regime = RegimeTributario.query.filter_by(nome="Lucro Presumido").one()
         db.session.commit()
-    assert ">LALUR<" not in client.get(f"/empresas/{empresa_lr}/contabil").get_data(as_text=True)
+    assert ">LALUR<" not in client.get(f"/empresas/{empresa_lr}").get_data(as_text=True)
     assert client.get(f"/lalur/{empresa_lr}").status_code == 302
 
 

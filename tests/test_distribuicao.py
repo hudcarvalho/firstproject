@@ -51,10 +51,10 @@ def test_menu_e_selecao(client, empresas):
     a, _ = empresas
     # não fica mais no menu superior: é uma aba na tela da empresa, ao lado de Contábil
     assert "Distribuição de Lucros" not in client.get("/contabil/").get_data(as_text=True)
-    html = client.get(f"/empresas/{a}/contabil").get_data(as_text=True)
+    html = client.get(f"/empresas/{a}").get_data(as_text=True)
     assert f'href="/distribuicao/{a}">Distribuição de Lucros</a>' in html
     html = client.get(f"/distribuicao/{a}").get_data(as_text=True)
-    assert f'href="/empresas/{a}/contabil">Contábil</a>' in html
+    assert f'href="/empresas/{a}">Cadastro</a>' in html
     assert 'nav-link active" href="/distribuicao/' in html
     assert client.get("/distribuicao/").status_code == 200
     # código exato ou item escolhido da lista abre direto
