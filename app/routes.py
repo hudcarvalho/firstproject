@@ -195,12 +195,27 @@ def _situacao(form, campo, campo_legado=None):
     return None
 
 
+def _resumo_empresa(empresa):
+    """Quadro ao lado do cadastro: distribuição de lucros do ano e quotas do IRPJ/CSLL a enviar."""
+    from .lalur import lembretes_pendentes
+
+    ano = date.today().year
+    distribuido = (db.session.query(func.sum(DistribuicaoLucro.valor))
+                   .join(Socio, DistribuicaoLucro.socio_id == Socio.id)
+                   .filter(Socio.empresa_id == empresa.id, DistribuicaoLucro.ano == ano).scalar())
+    quotas = 0
+    if empresa.lucro_real:
+        quotas = sum(1 for q in lembretes_pendentes() if q.apuracao.empresa_id == empresa.id)
+    return {"ano": ano, "distribuido": distribuido, "quotas_pendentes": quotas}
+
+
 def _render_form_empresa(empresa):
+    """Empresa nova: formulário próprio. Empresa existente: aba Cadastro (formulário + resumo)."""
     return render_template(
-        "empresas/form.html", empresa=empresa, modulos=Modulo.ativos(),
+        "empresas/cadastro.html" if empresa.id else "empresas/form.html", empresa=empresa, modulos=Modulo.ativos(),
         grupos=GrupoEconomico.query.order_by(GrupoEconomico.nome).all(),
         regimes=RegimeTributario.query.filter_by(ativo=True).order_by(RegimeTributario.nome).all(),
-        responsaveis=_responsaveis_ativos(),
+        responsaveis=_responsaveis_ativos(), resumo=_resumo_empresa(empresa) if empresa.id else None,
     )
 
 
@@ -237,35 +252,21 @@ def empresa_editar(id):
     empresa = _get(Empresa, id)
     if request.method == "POST":
         return _salvar_form_empresa(empresa, nova=False)
-    return _render_form_empresa(empresa)
+    return redirect(url_for("main.empresa_detalhe", id=id))
 
 
 @bp.route("/empresas/<int:id>")
 def empresa_detalhe(id):
-    _get(Empresa, id)
-    ativos = Modulo.ativos()
-    if not ativos:
-        return redirect(url_for("main.empresa_editar", id=id))
-    return redirect(url_for("main.empresa_modulo", id=id, modulo=ativos[0].codigo))
+    """Ao abrir o cliente: aba Cadastro, já pronta para editar (inclui o "escriturada até")."""
+    return _render_form_empresa(_get(Empresa, id))
 
-
-# ---------------------------------------------------------------- Empresa dentro de um módulo
 
 @bp.route("/empresas/<int:id>/<modulo>")
 def empresa_modulo(id, modulo):
-    empresa = _get(Empresa, id)
-    modulo = _modulo(modulo)
-    hoje = date.today()
-    controle = empresa.controle(modulo)
-    return render_template(
-        "empresas/detalhe.html", empresa=empresa, modulo=modulo, modulos=Modulo.ativos(),
-        hoje=hoje, controle=controle,
-        atraso=controle.meses_atrasados(hoje) if controle else None,
-        situacao=empresa.situacao_obrigacoes(modulo, hoje),
-        entregas=empresa.entregas_do_modulo(modulo),
-        obrigacoes_aplicaveis=empresa.obrigacoes_aplicaveis(modulo),
-        responsaveis=_responsaveis_ativos(),
-    )
+    """Endereço antigo da empresa dentro do módulo: agora abre a aba Cadastro."""
+    _get(Empresa, id)
+    _modulo(modulo)
+    return redirect(url_for("main.empresa_detalhe", id=id))
 
 
 @bp.post("/empresas/<int:id>/<modulo>/observacoes")

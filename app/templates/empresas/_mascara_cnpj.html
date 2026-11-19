@@ -1,0 +1,11 @@
+<script>
+document.getElementById('cnpj').addEventListener('input', function () {
+  const d = this.value.replace(/\D/g, '').slice(0, 14);
+  let v = d;
+  if (d.length > 12) v = d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{0,2})/, '$1.$2.$3/$4-$5');
+  else if (d.length > 8) v = d.replace(/^(\d{2})(\d{3})(\d{3})(\d{0,4})/, '$1.$2.$3/$4');
+  else if (d.length > 5) v = d.replace(/^(\d{2})(\d{3})(\d{0,3})/, '$1.$2.$3');
+  else if (d.length > 2) v = d.replace(/^(\d{2})(\d{0,3})/, '$1.$2');
+  this.value = v;
+});
+</script>

@@ -1,0 +1,53 @@
+{% extends "base.html" %}
+{% block title %}{{ empresa.nome_exibicao }}{% endblock %}
+{% block content %}
+{% with aba = 'cadastro' %}{% include "empresas/_cabecalho.html" %}{% endwith %}
+
+<div class="row g-4">
+  <div class="col-xl-8">
+    <form method="post" action="{{ url_for('main.empresa_editar', id=empresa.id) }}" class="card" id="form-cadastro">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+      <div class="card-body">
+        {% include "empresas/_campos_empresa.html" %}
+      </div>
+      <div class="card-footer d-flex align-items-center gap-3">
+        <button class="btn btn-primary">Salvar alterações</button>
+        <span class="small text-muted d-none" id="alterado">Há alterações não salvas.</span>
+      </div>
+    </form>
+  </div>
+
+  <div class="col-xl-4">
+    <div class="card mb-3">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div><div class="small text-muted">Distribuição de lucros {{ resumo.ano }}</div>
+          <div class="fs-5 fw-semibold">{{ 'R$ ' ~ (resumo.distribuido | valor) if resumo.distribuido else '—' }}</div></div>
+        <a class="small" href="{{ url_for('distribuicao.empresa', id=empresa.id) }}">abrir →</a>
+      </div>
+    </div>
+
+    {% if empresa.lucro_real %}
+    <div class="card mb-3 {{ 'border-warning' if resumo.quotas_pendentes }}">
+      <div class="card-body d-flex justify-content-between align-items-center">
+        <div><div class="small text-muted">Quotas do IRPJ/CSLL</div>
+          <div class="fw-semibold">{% if resumo.quotas_pendentes %}🔔 {{ resumo.quotas_pendentes }} quota(s) para enviar ao cliente{% else %}Nenhuma quota pendente de envio{% endif %}</div></div>
+        <a class="small" href="{{ url_for('lalur.empresa', id=empresa.id) }}">LALUR →</a>
+      </div>
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+{% include "empresas/_mascara_cnpj.html" %}
+<script>
+(() => {
+  const form = document.getElementById('form-cadastro'), aviso = document.getElementById('alterado');
+  let alterado = false;
+  form.addEventListener('input', () => { alterado = true; aviso.classList.remove('d-none'); });
+  form.addEventListener('submit', () => { alterado = false; });
+  window.addEventListener('beforeunload', ev => { if (alterado) { ev.preventDefault(); ev.returnValue = ''; } });
+})();
+</script>
+{% endblock %}

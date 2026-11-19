@@ -42,26 +42,29 @@ def test_modulos_iniciais(app):
 
 def test_paginas(client, app):
     eid = _cadastrar(client, app)
-    for url in ["/contabil/", "/empresas", "/empresas/nova", f"/empresas/{eid}/editar",
-                f"/empresas/{eid}/contabil", "/contabil/obrigacoes", "/contabil/obrigacoes/nova",
+    for url in ["/contabil/", "/empresas", "/empresas/nova", f"/empresas/{eid}", "/contabil/obrigacoes", "/contabil/obrigacoes/nova",
                 "/contabil/matriz", "/regimes", "/regimes/novo", "/responsaveis",
                 "/responsaveis/novo", "/modulos", "/modulos/1/editar"]:
         assert client.get(url).status_code == 200, url
     assert client.get("/").headers["Location"].endswith("/empresas")
+    # endereços antigos da tela do cliente levam à aba Cadastro
+    for url in (f"/empresas/{eid}/editar", f"/empresas/{eid}/contabil"):
+        assert client.get(url).headers["Location"].endswith(f"/empresas/{eid}")
 
 
 def test_modulo_inativo_fica_oculto(client, app):
     eid = _cadastrar(client, app)
     assert client.get("/fiscal/").status_code == 404
     assert client.get(f"/empresas/{eid}/fiscal").status_code == 404
-    assert "PIS/COFINS" not in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert "Rotina · Fiscal" not in client.get(f"/empresas/{eid}").get_data(as_text=True)
 
 
 def test_cadastro_empresa_e_obrigacoes_do_regime(client, app):
     eid = _cadastrar(client, app)
-    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    html = client.get(f"/empresas/{eid}").get_data(as_text=True)
     assert "ACME Ltda" in html and "11.222.333/0001-81" in html
-    assert "Escriturada até" in html
+    assert "Escriturada até" in html and 'value="2026-06"' in html  # já pronto para editar
+    assert "Obrigação" not in html and "Registrar cumprimento" not in html  # obrigações ficam na aba própria
     with app.app_context():
         e = db.session.get(Empresa, eid)
         nomes = {o.nome for o in e.obrigacoes_aplicaveis(_modulo("contabil"))}
@@ -75,8 +78,8 @@ def test_cadastro_empresa_e_obrigacoes_do_regime(client, app):
 def test_ativar_modulo_fiscal(client, app):
     eid = _cadastrar(client, app)
     _ativar(app, "fiscal")
-    html = client.get(f"/empresas/{eid}/fiscal").get_data(as_text=True)
-    assert "PIS/COFINS" in html and "Apurado até" in html
+    html = client.get(f"/empresas/{eid}").get_data(as_text=True)
+    assert "Rotina · Fiscal" in html and "Apurado até" in html
     assert client.get("/fiscal/").status_code == 200
     # responsável próprio por módulo
     with app.app_context():
@@ -245,7 +248,7 @@ def test_sem_movimento(client, app):
         assert c.sem_movimento and c.concluido_ate == date(2026, 6, 1)
     html = client.get("/empresas").get_data(as_text=True)
     assert 'data-sitcontabil="sm"' in html
-    assert "Sem movimento</span>" in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
+    assert '<option value="sem_movimento" selected>' in client.get(f"/empresas/{eid}").get_data(as_text=True)
     # sem competência e sem marcar: erro, nada muda
     client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": ""})
     with app.app_context():
@@ -263,8 +266,8 @@ def test_ex_cliente_e_encerrada(client, app):
         c = db.session.get(Empresa, eid).controle(_modulo("contabil"))
         assert c.situacao == "ex_cliente" and c.concluido_ate == date(2026, 6, 1) and not c.sem_movimento
     assert 'data-sitcontabil="ex"' in client.get("/empresas").get_data(as_text=True)
-    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
-    assert "Ex-Cliente</span>" in html and '<option value="encerrada" >Encerrada</option>' in html.replace("  ", " ")
+    html = client.get(f"/empresas/{eid}").get_data(as_text=True)
+    assert '<option value="ex_cliente" selected>Ex-Cliente</option>' in html and '<option value="encerrada" >Encerrada</option>' in html
     client.post(f"/empresas/{eid}/contabil/controle", data={"concluido_ate": "", "situacao": "encerrada"})
     assert 'data-sitcontabil="enc"' in client.get("/empresas").get_data(as_text=True)
     # "Normal" volta ao normal (com competência)
@@ -272,12 +275,12 @@ def test_ex_cliente_e_encerrada(client, app):
     with app.app_context():
         assert db.session.get(Empresa, eid).controle(_modulo("contabil")).situacao is None
     # no formulário de cadastro também
-    assert 'name="situacao_contabil"' in client.get(f"/empresas/{eid}/editar").get_data(as_text=True)
+    assert 'name="situacao_contabil"' in client.get(f"/empresas/{eid}").get_data(as_text=True)
 
 
 def test_botao_voltar_aos_clientes(client, app):
     eid = _cadastrar(client, app)
-    for url in [f"/empresas/{eid}/contabil", f"/empresas/{eid}/editar", f"/distribuicao/empresas/{eid}"]:
+    for url in [f"/empresas/{eid}", "/empresas/nova", f"/distribuicao/{eid}"]:
         assert "voltar-clientes" in client.get(url).get_data(as_text=True), url
 
 
@@ -319,7 +322,7 @@ def test_grupo_economico(client, app):
     assert 'id="f-grupo"' in html and f'<option value="{gid}">GRUPO CONFECÇÕES</option>' in html
     assert html.count(f'data-grupo="{gid}"') == 2 and html.count('data-grupo="0"') == 1
     # cabeçalho da empresa mostra o grupo com link para o filtro
-    assert f"/empresas?grupo={gid}" in client.get(f"/empresas/{alfa_id}/contabil").get_data(as_text=True)
+    assert f"/empresas?grupo={gid}" in client.get(f"/empresas/{alfa_id}").get_data(as_text=True)
 
     # tirar as duas empresas do grupo apaga o grupo que ficou vazio
     for eid, nome, cnpj in ((alfa_id, "ALFA", "11.222.333/0001-81"), (beta_id, "BETA", "11.444.777/0001-61")):
@@ -350,8 +353,6 @@ def test_registro_irpj_com_imposto(client, app):
         irpj = Obrigacao.query.filter_by(nome="IRPJ").one().id
         ecd = Obrigacao.query.filter_by(nome="ECD").one().id
     url = f"/empresas/{eid}/contabil/entregas"
-    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
-    assert f'value="{irpj}" data-imposto="1" data-periodicidade="trimestral"' in html
 
     # sem forma de pagamento: recusado
     r = client.post(url, data={"obrigacao_id": irpj, "competencia": "2026-05"}, follow_redirects=True)
@@ -377,9 +378,6 @@ def test_registro_irpj_com_imposto(client, app):
         assert (uni.forma_pagamento, uni.valor_imposto, uni.valor_quota) == ("unica", Decimal("1234.56"), None)
         anual = ent[("ECD", date(2025, 12, 1))]
         assert anual.forma_pagamento is None and anual.valor_imposto is None
-    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
-    assert "R$ 9.000,00 · Parcelado (quota R$ 3.000,00)" in html
-    assert "R$ 1.234,56 · Quota única" in html
 
 
 def test_obrigacao_marcada_como_imposto(client, app):
@@ -392,16 +390,14 @@ def test_obrigacao_marcada_como_imposto(client, app):
 
 def test_observacoes_na_tela_da_empresa(client, app):
     eid = _cadastrar(client, app)
-    html = client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
-    assert 'id="form-observacoes"' in html
+    html = client.get(f"/empresas/{eid}").get_data(as_text=True)
+    assert 'name="observacoes"' in html  # na aba Cadastro, junto com os demais dados
     r = client.post(f"/empresas/{eid}/contabil/observacoes",
                     data={"observacoes": "  Sócio prefere contato por e-mail.\nECD com termo especial.  "})
-    assert r.status_code == 302 and r.headers["Location"].endswith("#form-observacoes")
+    assert r.status_code == 302
     with app.app_context():
         assert db.session.get(Empresa, eid).observacoes == "Sócio prefere contato por e-mail.\nECD com termo especial."
-    assert "Sócio prefere contato por e-mail." in client.get(f"/empresas/{eid}/contabil").get_data(as_text=True)
-    # o mesmo campo do cadastro: aparece em "Editar cadastro"
-    assert "ECD com termo especial." in client.get(f"/empresas/{eid}/editar").get_data(as_text=True)
+    assert "ECD com termo especial." in client.get(f"/empresas/{eid}").get_data(as_text=True)
     client.post(f"/empresas/{eid}/contabil/observacoes", data={"observacoes": "   "})
     with app.app_context():
         assert db.session.get(Empresa, eid).observacoes is None
