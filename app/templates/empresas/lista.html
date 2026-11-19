@@ -74,7 +74,7 @@
   </thead>
   <tbody>
   {% for e in empresas %}
-    <tr class="linha-cliente" data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
+    <tr class="linha-cliente{{ ' com-observacao' if e.observacoes }}"{% if e.observacoes %} title="Observação: {{ e.observacoes }}"{% endif %} data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
         data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" data-sit{{ m.codigo }}="{{ {'sem_movimento': 'sm', 'ex_cliente': 'ex', 'encerrada': 'enc'}.get(c.situacao or '', '') if c else '' }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
