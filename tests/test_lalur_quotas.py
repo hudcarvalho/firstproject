@@ -105,3 +105,20 @@ def test_quotas_do_lancamento_vao_para_o_resumo_separadas(client, app, lr):
     _apurar(client, a, 2026, 1, "1")
     html = client.get("/lalur/quotas?ano=2026").get_data(as_text=True)
     assert "<strong>69.000,00</strong>" in html and "<strong>27.000,00</strong>" in html
+
+
+def test_filtros_de_selecao_multipla(client, app, lr):
+    a, b = lr
+    _apurar(client, a, 2020, 1, "3")
+    _apurar(client, b, 2020, 1, "1")
+    client.post(f"/lalur/{b}/2020/2", data={"lucro_antes": "1.000,00", "aliquota_csll": "9"})  # sem quotas
+
+    def linhas(**f):
+        html = client.get("/lalur/quotas", query_string={"ano": 2020, **f}).get_data(as_text=True)
+        return html.count("trim. 2020</td>"), html
+    assert linhas(quotas="3,nao")[0] == 2  # 3 quotas OU não informado
+    assert linhas(quotas="1,3")[0] == 2
+    assert linhas(periodo="2")[0] == 1 and linhas(periodo="1,2")[0] == 3
+    assert linhas(quotas="xyz")[0] == 3  # valor inválido é ignorado
+    _, html = linhas(quotas="3,nao")
+    assert 'data-valores="3,nao"' in html and "filtro_multi.js" in html

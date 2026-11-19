@@ -1,5 +1,32 @@
 {% extends "base.html" %}
 {% block title %}Quotas IRPJ/CSLL{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  // filtros de seleção múltipla: a página recarrega ao fechar a lista, se algo mudou
+  const form = document.getElementById('filtros-quotas');
+  const multiplos = [...form.querySelectorAll('select.filtro-multiplo')];
+  let mudou = false;
+  multiplos.forEach(sel => {
+    FiltroMulti.criar(sel);
+    if (sel.dataset.valores) FiltroMulti.definir(sel, sel.dataset.valores.split(','));
+    sel.addEventListener('change', () => { mudou = true; });
+    sel.nextElementSibling.addEventListener('hidden.bs.dropdown', () => { if (mudou) enviar(); });
+  });
+  function enviar() {
+    multiplos.forEach(sel => {
+      const v = FiltroMulti.valores(sel);
+      const campo = document.createElement('input');
+      campo.type = 'hidden'; campo.name = sel.name; campo.value = v ? v.join(',') : '';
+      sel.removeAttribute('name');
+      form.appendChild(campo);
+    });
+    form.submit();
+  }
+})();
+</script>
+{% endblock %}
 {% block content %}
 <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
   <h1 class="h3 mb-0">Quotas do IRPJ/CSLL (LALUR)</h1>
@@ -10,25 +37,25 @@
 <form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3 small" id="filtros-quotas">
   <div><label class="form-label mb-0" for="f-ano">Ano</label>
     <select class="form-select form-select-sm" name="ano" id="f-ano" onchange="this.form.submit()">
-      {% if situacao == 'pendente' %}<option value="" {{ 'selected' if not ano }}>Todos</option>{% endif %}
+      {% if situacao == ['pendente'] %}<option value="" {{ 'selected' if not ano }}>Todos</option>{% endif %}
       {% for a in anos %}<option value="{{ a }}" {{ 'selected' if a == ano }}>{{ a }}</option>{% endfor %}
     </select></div>
   <div><label class="form-label mb-0" for="f-periodo">Período</label>
-    <select class="form-select form-select-sm" name="periodo" id="f-periodo" onchange="this.form.submit()">
+    <select class="form-select form-select-sm filtro-multiplo" name="periodo" id="f-periodo" data-valores="{{ periodo|join(',') }}" aria-label="Período">
       <option value="">Todos</option>
-      {% for p in (1, 2, 3, 4, 0) %}<option value="{{ p }}" {{ 'selected' if periodo == p|string }}>{{ rotulo_periodo(p) }}</option>{% endfor %}
+      {% for p in (1, 2, 3, 4, 0) %}<option value="{{ p }}">{{ rotulo_periodo(p) }}</option>{% endfor %}
     </select></div>
   <div><label class="form-label mb-0" for="f-quotas">Quotas</label>
-    <select class="form-select form-select-sm {{ 'filtro-ativo' if filtro_quotas }}" name="quotas" id="f-quotas" onchange="this.form.submit()">
+    <select class="form-select form-select-sm filtro-multiplo" name="quotas" id="f-quotas" data-valores="{{ filtro_quotas|join(',') }}" aria-label="Quotas">
       <option value="">Todas</option>
-      {% for n, r in opcoes.items() %}<option value="{{ n }}" {{ 'selected' if filtro_quotas == n|string }}>{{ r }}</option>{% endfor %}
-      <option value="nao" {{ 'selected' if filtro_quotas == 'nao' }}>Não informado</option>
+      {% for n, r in opcoes.items() %}<option value="{{ n }}">{{ r }}</option>{% endfor %}
+      <option value="nao">Não informado</option>
     </select></div>
   <div><label class="form-label mb-0" for="f-situacao">Envio ao cliente</label>
-    <select class="form-select form-select-sm {{ 'filtro-ativo' if situacao }}" name="situacao" id="f-situacao" onchange="this.form.submit()">
+    <select class="form-select form-select-sm filtro-multiplo" name="situacao" id="f-situacao" data-valores="{{ situacao|join(',') }}" aria-label="Envio ao cliente">
       <option value="">Todos</option>
-      <option value="pendente" {{ 'selected' if situacao == 'pendente' }}>🔔 A enviar (lembrete)</option>
-      <option value="enviada" {{ 'selected' if situacao == 'enviada' }}>✓ Todas enviadas</option>
+      <option value="pendente">🔔 A enviar (lembrete)</option>
+      <option value="enviada">✓ Todas enviadas</option>
     </select></div>
   <span class="ms-auto text-muted">{{ linhas|length }} apuração(ões)</span>
 </form>

@@ -34,3 +34,12 @@ body { background: #f5f6f8; }
 .tabela-obrigacoes .celula.is-invalid { background: #f8d7da; }
 .tabela-obrigacoes .celula.data::placeholder { color: transparent; }
 .tabela-obrigacoes .celula.data:focus::placeholder { color: #adb5bd; }
+
+/* Filtro de seleção múltipla (estilo Excel) */
+.filtro-multi { min-width: 0; }
+.filtro-multi > .form-select { overflow: hidden; white-space: nowrap; background-color: #fff; }
+.filtro-multi-menu { min-width: 220px; max-width: 340px; font-size: .875rem; font-weight: normal; }
+.filtro-multi-opcoes { max-height: 300px; overflow-y: auto; }
+.filtro-multi-menu .dropdown-item { cursor: pointer; white-space: normal; }
+.filtro-multi-menu .dropdown-item:active { background-color: #e9ecef; color: inherit; }
+.filtro-multi > .form-select.filtro-ativo { border-color: #0d6efd; background-color: #eef4ff; }

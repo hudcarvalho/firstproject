@@ -1125,29 +1125,35 @@ def quotas():
     """Apurações do LALUR com o pagamento em quotas: filtros e marcação de envio ao cliente."""
     hoje = date.today()
     args = request.args
-    situacao = args.get("situacao", "")
-    ano = None if situacao == "pendente" and not args.get("ano") else _ano()
-    periodo = args.get("periodo", "")
-    filtro_quotas = args.get("quotas", "")
+    def lista(nome, validos):  # filtros de seleção múltipla: valores separados por vírgula
+        return [v for v in args.get(nome, "").split(",") if v in validos]
+
+    situacao = lista("situacao", ("pendente", "enviada"))
+    ano = None if situacao == ["pendente"] and not args.get("ano") else _ano()
+    periodo = lista("periodo", ("0", "1", "2", "3", "4"))
+    filtro_quotas = lista("quotas", ("1", "2", "3", "nao"))
     consulta = LalurApuracao.query.join(Empresa).filter(Empresa.ativo.is_(True))
     if ano:
         consulta = consulta.filter(LalurApuracao.ano == ano)
-    if periodo in ("0", "1", "2", "3", "4"):
-        consulta = consulta.filter(LalurApuracao.periodo == int(periodo))
-    if filtro_quotas in ("1", "2", "3"):
-        consulta = consulta.filter(LalurApuracao.quotas == int(filtro_quotas))
-    elif filtro_quotas == "nao":
-        consulta = consulta.filter(LalurApuracao.quotas.is_(None))
+    if periodo:
+        consulta = consulta.filter(LalurApuracao.periodo.in_([int(p) for p in periodo]))
+    if filtro_quotas:
+        numeros = [int(q) for q in filtro_quotas if q != "nao"]
+        condicoes = [LalurApuracao.quotas.in_(numeros)] if numeros else []
+        if "nao" in filtro_quotas:
+            condicoes.append(LalurApuracao.quotas.is_(None))
+        consulta = consulta.filter(db.or_(*condicoes))
     calculos = {}
     linhas = []
     for a in consulta.all():
         if not a.empresa.lucro_real:
             continue
         lista = quotas_do_cliente(a)
-        if situacao == "pendente" and not any(q.pendente(hoje) for q in lista):
-            continue
-        if situacao == "enviada" and not (lista and all(q.envio for q in lista)):
-            continue
+        if situacao:
+            a_enviar = any(q.pendente(hoje) for q in lista)
+            enviadas = bool(lista) and all(q.envio for q in lista)
+            if not (("pendente" in situacao and a_enviar) or ("enviada" in situacao and enviadas)):
+                continue
         if a.empresa_id not in calculos:
             calculos[a.empresa_id] = demonstrativos(a.empresa)[0]
         d = calculos[a.empresa_id].get((a.ano, a.periodo))
