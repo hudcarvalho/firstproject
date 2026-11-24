@@ -121,6 +121,8 @@ def login():
             if usuario and usuario.ativo and usuario.confere_senha(senha):
                 _falhas.pop(email, None)
                 login_user(usuario, remember=request.form.get("lembrar") == "on")
+                from .auditoria import registrar_entrada
+                registrar_entrada(usuario)
                 return redirect(_destino_seguro(request.args.get("next")) or url_for("main.inicio"))
             _falhas[email].append(time.time())
             flash("E-mail ou senha incorretos.", "danger")
@@ -205,6 +207,8 @@ def usuario_form(id):
                 erros.append(erro)
         if usuario.id == current_user.id and (not admin or not ativo):
             erros.append("Você não pode remover o próprio acesso de administrador.")
+        if usuario.dono and usuario.id != current_user.id:
+            erros.append("Este usuário só pode ser alterado por ele mesmo.")
         if erros:
             for e in erros:
                 flash(e, "danger")

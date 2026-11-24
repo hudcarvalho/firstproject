@@ -454,6 +454,8 @@ class Usuario(UserMixin, db.Model):
     admin = db.Column(db.Boolean, default=False, nullable=False)
     ativo = db.Column(db.Boolean, default=True, nullable=False)
     responsavel_id = db.Column(db.Integer, db.ForeignKey("responsavel.id"))
+    # dono do sistema: vê o histórico de alterações; definido só pelo comando "flask definir-dono"
+    dono = db.Column(db.Boolean, default=False, nullable=False, server_default=db.false())
 
     responsavel = db.relationship("Responsavel")
 
@@ -468,3 +470,18 @@ class Usuario(UserMixin, db.Model):
 
     def confere_senha(self, senha):
         return check_password_hash(self.senha_hash, senha)
+
+
+class RegistroAlteracao(db.Model):
+    """Histórico: quem criou, alterou ou apagou o quê (visível só para o dono do sistema)."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    quando = db.Column(db.DateTime, nullable=False, index=True)
+    usuario_id = db.Column(db.Integer, index=True)
+    usuario_nome = db.Column(db.String(120))
+    acao = db.Column(db.String(20), nullable=False)  # criou | alterou | apagou | entrou
+    tipo = db.Column(db.String(60), nullable=False)  # ex.: "Cadastro da empresa"
+    objeto_id = db.Column(db.Integer)
+    empresa_id = db.Column(db.Integer, index=True)
+    empresa_nome = db.Column(db.String(200))
+    detalhes = db.Column(db.Text)  # uma alteração por linha: "Campo: antes → depois"
