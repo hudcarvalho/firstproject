@@ -22,6 +22,19 @@ def registrar_comandos(app):
         db.session.commit()
         click.echo(f"Administrador {email} criado.")
 
+    @app.cli.command("definir-dono")
+    @click.argument("email")
+    def definir_dono(email):
+        """Define o dono do sistema (vê o histórico de alterações). Só um; não aparece nas telas."""
+        usuario = Usuario.query.filter_by(email=email.strip().lower()).first()
+        if usuario is None:
+            raise click.ClickException("Usuário não encontrado.")
+        for u in Usuario.query.filter_by(dono=True):
+            u.dono = False
+        usuario.dono, usuario.admin, usuario.ativo = True, True, True
+        db.session.commit()
+        click.echo(f"{usuario.email} agora é o dono do sistema.")
+
     @app.cli.command("redefinir-senha")
     @click.argument("email")
     @click.password_option("--senha", prompt="Nova senha")

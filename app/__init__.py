@@ -114,6 +114,12 @@ def create_app(config=None):
     from .ferramentas import bp as bp_ferramentas
     app.register_blueprint(bp_ferramentas)
 
+    from .auditoria import ativar as ativar_historico
+    ativar_historico()
+
+    from .historico import bp as bp_historico
+    app.register_blueprint(bp_historico)
+
     from .cli import registrar_comandos
     registrar_comandos(app)
 

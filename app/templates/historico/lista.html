@@ -1,0 +1,82 @@
+{% extends "base.html" %}
+{% block title %}Histórico de alterações{% endblock %}
+{% block content %}
+<div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
+  <h1 class="h3 mb-0">Histórico de alterações</h1>
+  <a class="btn btn-sm btn-outline-success" href="{{ url_for('historico.lista', formato='xlsx', **args.to_dict()) }}">Exportar Excel</a>
+</div>
+<p class="small text-muted">Quem criou, alterou ou apagou cada informação, e quando entrou no sistema. Esta tela é visível só para você.</p>
+
+<form method="get" class="d-flex flex-wrap align-items-end gap-2 mb-3 small" id="filtros-historico">
+  <div style="min-width: 200px"><label class="form-label mb-0" for="f-usuario">Usuário</label>
+    <select class="form-select form-select-sm filtro-multiplo" name="usuario" id="f-usuario" data-valores="{{ args.get('usuario', '') }}" aria-label="Usuário">
+      <option value="">Todos</option>
+      {% for u in usuarios %}<option value="{{ u.id }}">{{ u.nome }}</option>{% endfor %}
+    </select></div>
+  <div style="min-width: 160px"><label class="form-label mb-0" for="f-acao">Ação</label>
+    <select class="form-select form-select-sm filtro-multiplo" name="acao" id="f-acao" data-valores="{{ args.get('acao', '') }}" aria-label="Ação">
+      <option value="">Todas</option>
+      <option value="criou">Criou</option><option value="alterou">Alterou</option>
+      <option value="apagou">Apagou</option><option value="entrou">Entrou no sistema</option>
+    </select></div>
+  <div><label class="form-label mb-0" for="f-empresa">Empresa</label>
+    <input class="form-control form-control-sm" name="empresa" id="f-empresa" value="{{ args.get('empresa', '') }}" placeholder="Nome da empresa"></div>
+  <div><label class="form-label mb-0" for="f-de">De</label>
+    <input type="date" class="form-control form-control-sm" name="de" id="f-de" value="{{ args.get('de', '') }}"></div>
+  <div><label class="form-label mb-0" for="f-ate">Até</label>
+    <input type="date" class="form-control form-control-sm" name="ate" id="f-ate" value="{{ args.get('ate', '') }}"></div>
+  <button class="btn btn-sm btn-primary">Filtrar</button>
+  <a class="btn btn-sm btn-link" href="{{ url_for('historico.lista') }}">Limpar</a>
+  <span class="ms-auto text-muted">{{ total }} registro(s)</span>
+</form>
+
+<div class="card"><div class="table-responsive">
+<table class="table table-sm align-middle mb-0">
+  <thead class="table-light"><tr><th class="text-nowrap">Data/hora</th><th>Usuário</th><th>Ação</th><th>O quê</th><th>Empresa</th><th>Detalhes</th></tr></thead>
+  <tbody>
+  {% for r in registros %}
+    <tr>
+      <td class="text-nowrap small">{{ r.quando.strftime('%d/%m/%Y %H:%M') }}</td>
+      <td class="text-nowrap">{{ r.usuario_nome or '—' }}</td>
+      <td><span class="badge {{ {'criou': 'text-bg-success', 'alterou': 'text-bg-primary', 'apagou': 'text-bg-danger'}.get(r.acao, 'text-bg-secondary') }}">{{ {'entrou': 'entrou'}.get(r.acao, r.acao) }}</span></td>
+      <td class="small">{{ r.tipo }}</td>
+      <td class="small">{% if r.empresa_id %}<a href="{{ url_for('main.empresa_detalhe', id=r.empresa_id) }}">{{ r.empresa_nome }}</a>{% else %}{{ r.empresa_nome or '' }}{% endif %}</td>
+      <td class="small" style="white-space: pre-line">{{ r.detalhes or '' }}</td>
+    </tr>
+  {% else %}
+    <tr><td colspan="6" class="text-center text-muted py-4">Nenhum registro com esses filtros.</td></tr>
+  {% endfor %}
+  </tbody>
+</table>
+</div></div>
+{% if paginas > 1 %}
+<nav class="mt-2 d-flex gap-2 align-items-center small">
+  {% set base = args.to_dict() %}
+  {% if pagina > 1 %}{% set _ = base.update({'pagina': pagina - 1}) %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('historico.lista', **base) }}">‹ Mais recentes</a>{% endif %}
+  <span>Página {{ pagina }} de {{ paginas }}</span>
+  {% if pagina < paginas %}{% set _ = base.update({'pagina': pagina + 1}) %}<a class="btn btn-sm btn-outline-secondary" href="{{ url_for('historico.lista', **base) }}">Mais antigos ›</a>{% endif %}
+</nav>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const form = document.getElementById('filtros-historico');
+  const multiplos = [...form.querySelectorAll('select.filtro-multiplo')];
+  multiplos.forEach(sel => {
+    FiltroMulti.criar(sel);
+    if (sel.dataset.valores) FiltroMulti.definir(sel, sel.dataset.valores.split(','));
+  });
+  form.addEventListener('submit', () => {
+    multiplos.forEach(sel => {
+      const v = FiltroMulti.valores(sel);
+      const campo = document.createElement('input');
+      campo.type = 'hidden'; campo.name = sel.name; campo.value = v ? v.join(',') : '';
+      sel.removeAttribute('name');
+      form.appendChild(campo);
+    });
+  });
+})();
+</script>
+{% endblock %}

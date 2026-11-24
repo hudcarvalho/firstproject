@@ -67,6 +67,7 @@
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">{{ current_user.nome }}</a>
           <ul class="dropdown-menu dropdown-menu-end">
             <li><a class="dropdown-item" href="{{ url_for('auth.minha_senha') }}">Alterar senha</a></li>
+            {% if current_user.dono %}<li><a class="dropdown-item" href="{{ url_for('historico.lista') }}">Histórico de alterações</a></li>{% endif %}
             <li><form method="post" action="{{ url_for('auth.logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="dropdown-item">Sair</button></form></li>
           </ul>
         </li>
