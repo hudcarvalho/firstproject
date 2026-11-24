@@ -434,3 +434,21 @@ def test_limpar_observacoes_so_admin(client, app):
     entrar(c, "comum@escritorio.com")
     assert c.get("/clientes/observacoes").status_code == 403
     assert c.post("/clientes/observacoes", data={"confirmacao": "APAGAR"}).status_code == 403
+
+
+def test_exportar_clientes_em_excel(client, app):
+    from io import BytesIO
+    from openpyxl import load_workbook
+    eid = _cadastrar(client, app)
+    html = client.get("/empresas").get_data(as_text=True)
+    assert "Exportar Excel" in html and f'data-id="{eid}"' in html
+    ws = load_workbook(BytesIO(client.post("/empresas/exportar", data={"ids": str(eid)}).data)).active
+    cab = [c.value for c in ws[1]]
+    assert cab[:9] == ["Código", "Razão social", "Nome fantasia", "CNPJ", "Grupo econômico", "Tributação",
+                       "Resp. Contábil", "Escriturada até", "Situação (Contábil)"]
+    linha = dict(zip(cab, [c.value for c in ws[2]]))
+    assert (linha["Razão social"], linha["CNPJ"], linha["Tributação"], linha["Resp. Contábil"],
+            linha["Escriturada até"], linha["Ativa"]) == ("ACME Ltda", "11.222.333/0001-81", "Lucro Presumido",
+                                                          "Ana", "06/2026", "Sim")
+    # sem clientes visíveis: só o cabeçalho
+    assert load_workbook(BytesIO(client.post("/empresas/exportar", data={"ids": ""}).data)).active.max_row == 1

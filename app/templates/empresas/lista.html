@@ -4,6 +4,10 @@
 <div class="d-flex justify-content-between align-items-center mb-2">
   <h1 class="h3 mb-0">Clientes</h1>
   <div>
+    <form method="post" action="{{ url_for('main.empresas_exportar') }}" class="d-inline" id="form-exportar">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="ids" id="exportar-ids">
+      <button class="btn btn-outline-success" title="Exporta os clientes que estão aparecendo (com os filtros e a ordem atuais)">Exportar Excel</button>
+    </form>
     {% if current_user.admin %}<a class="btn btn-outline-primary" href="{{ url_for('main.importar') }}">Importar planilha</a>{% endif %}
     {% if current_user.admin %}<a class="btn btn-primary" href="{{ url_for('main.empresa_nova') }}">+ Nova empresa</a>{% endif %}
   </div>
@@ -74,7 +78,7 @@
   </thead>
   <tbody>
   {% for e in empresas %}
-    <tr class="linha-cliente{{ ' com-observacao' if e.observacoes }}"{% if e.observacoes %} title="Observação: {{ e.observacoes }}"{% endif %} data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
+    <tr data-id="{{ e.id }}" class="linha-cliente{{ ' com-observacao' if e.observacoes }}"{% if e.observacoes %} title="Observação: {{ e.observacoes }}"{% endif %} data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
         data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}"
         {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" data-sit{{ m.codigo }}="{{ {'sem_movimento': 'sm', 'ex_cliente': 'ex', 'encerrada': 'enc'}.get(c.situacao or '', '') if c else '' }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
@@ -201,6 +205,12 @@
     history.replaceState(null, '', url);
     lembrar();
   }
+
+  // Exportar Excel: só os clientes que estão aparecendo, na ordem da tela
+  document.getElementById('form-exportar').addEventListener('submit', () => {
+    document.getElementById('exportar-ids').value = Array.from(document.querySelectorAll('tr.linha-cliente'))
+      .filter(tr => !tr.classList.contains('d-none')).map(tr => tr.dataset.id).join(',');
+  });
 
   // Ordenação ao clicar nos títulos Código e Razão social (clicar de novo inverte).
   const corpo = vazio.parentNode;

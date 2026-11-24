@@ -144,6 +144,63 @@ def empresas_lista():
     )
 
 
+@bp.post("/empresas/exportar")
+def empresas_exportar():
+    """Planilha geral dos clientes que estavam aparecendo na lista (filtros e ordem da tela)."""
+    from io import BytesIO
+
+    from flask import send_file
+    from openpyxl import Workbook
+    from openpyxl.styles import Alignment, Font, PatternFill
+
+    ids = [int(x) for x in (request.form.get("ids") or "").split(",") if x.isdigit()]
+    por_id = {e.id: e for e in _com_relacionamentos(acesso.filtrar(Empresa.query.filter(Empresa.id.in_(ids or [0]))))}
+    empresas = [por_id[i] for i in ids if i in por_id]
+    modulos = Modulo.ativos()
+    ano = date.today().year
+    distribuido = dict(
+        db.session.query(Socio.empresa_id, func.sum(DistribuicaoLucro.valor))
+        .join(DistribuicaoLucro, DistribuicaoLucro.socio_id == Socio.id)
+        .filter(DistribuicaoLucro.ano == ano, Socio.empresa_id.in_(ids or [0]))
+        .group_by(Socio.empresa_id)
+    )
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Clientes"
+    cab = ["Código", "Razão social", "Nome fantasia", "CNPJ", "Grupo econômico", "Tributação"]
+    for m in modulos:
+        cab += [f"Resp. {m.nome}", m.rotulo_controle, f"Situação ({m.nome})"]
+    cab += [f"Distribuição de lucros {ano} (R$)", "Ativa", "Observações"]
+    ws.append(cab)
+    for c in ws[1]:
+        c.font = Font(bold=True)
+        c.fill = PatternFill("solid", fgColor="D9D9D9")
+        c.alignment = Alignment(vertical="center", wrap_text=True)
+    for e in empresas:
+        linha = [int(e.codigo) if (e.codigo or "").strip().isdigit() else e.codigo, e.razao_social, e.nome_fantasia,
+                 e.cnpj_formatado, e.grupo.nome if e.grupo else None, e.regime.nome]
+        for m in modulos:
+            c = e.controle(m)
+            linha += [c.responsavel.nome if c and c.responsavel else None,
+                      c.concluido_ate.strftime("%m/%Y") if c and c.concluido_ate else None,
+                      c.situacao_rotulo if c and c.situacao else None]
+        linha += [distribuido.get(e.id), "Sim" if e.ativo else "Não", e.observacoes]
+        ws.append(linha)
+        ws.cell(ws.max_row, len(cab) - 2).number_format = "#,##0.00"
+        ws.cell(ws.max_row, len(cab)).alignment = Alignment(wrap_text=True, vertical="top")
+    larguras = [9, 45, 30, 20, 20, 20] + [18, 16, 16] * len(modulos) + [18, 8, 50]
+    from openpyxl.utils import get_column_letter
+    for i, largura in enumerate(larguras, start=1):
+        ws.column_dimensions[get_column_letter(i)].width = largura
+    ws.freeze_panes = "C2"
+    ws.auto_filter.ref = ws.dimensions
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    return send_file(buf, as_attachment=True, download_name=f"clientes_{date.today():%Y-%m-%d}.xlsx",
+                     mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+
+
 def _form_empresa(empresa):
     f = request.form
     erros = []
