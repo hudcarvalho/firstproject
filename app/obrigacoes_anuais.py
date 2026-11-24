@@ -6,6 +6,7 @@ from io import BytesIO
 
 from flask import Blueprint, abort, flash, jsonify, redirect, render_template, request, send_file, url_for
 
+from . import acesso
 from .competencia import fmt_documento
 from .models import Empresa, Modulo, ObrigacaoAnual, db
 
@@ -40,7 +41,7 @@ def _responsavel(empresa, modulo):
 
 
 def _dados(ano, inativas=False):
-    q = Empresa.query
+    q = acesso.filtrar(Empresa.query)
     if not inativas:
         q = q.filter(Empresa.ativo.is_(True))
     empresas = sorted(q.all(), key=lambda e: (_ordem_codigo(e), e.razao_social.lower()))
@@ -83,9 +84,7 @@ def salvar():
     campo = request.form.get("campo")
     if campo not in CAMPOS:
         abort(400)
-    empresa = db.session.get(Empresa, request.form.get("empresa_id", type=int) or 0)
-    if empresa is None:
-        abort(404)
+    empresa = acesso.exigir(db.session.get(Empresa, request.form.get("empresa_id", type=int) or 0))
     ano = _ano()
     valor = request.form.get("valor", "")
     if campo == "observacao":
@@ -160,7 +159,7 @@ def importar():
     if not arquivos:
         flash("Escolha os recibos em PDF ou uma pasta compactada (.zip) com os PDFs.", "warning")
         return redirect(url_for("obrigacoes_anuais.importar"))
-    empresas = {e.cnpj: e for e in Empresa.query.all()}
+    empresas = {e.cnpj: e for e in acesso.filtrar(Empresa.query).all()}
     lidos = [recibos.ler_pdf(nome, conteudo) for nome, conteudo in arquivos]
     linhas = []
     for r in lidos:
@@ -196,7 +195,8 @@ def importar_confirmar():
             empresa_id, quando = int(empresa_id), date.fromisoformat(data_iso)
         except ValueError:
             continue
-        if campo not in ObrigacaoAnual.CAMPOS_DATA or db.session.get(Empresa, empresa_id) is None:
+        if campo not in ObrigacaoAnual.CAMPOS_DATA or db.session.get(Empresa, empresa_id) is None \
+                or not acesso.pode(empresa_id):
             continue
         reg = ObrigacaoAnual.query.filter_by(empresa_id=empresa_id, ano=quando.year).first()
         if reg is None:

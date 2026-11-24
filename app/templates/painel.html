@@ -4,7 +4,7 @@
 {% block content %}
 <div class="d-flex justify-content-between align-items-center mb-3">
   <h1 class="h3 mb-0">Painel · {{ modulo.nome }}</h1>
-  <a class="btn btn-primary" href="{{ url_for('main.empresa_nova') }}">+ Nova empresa</a>
+  {% if current_user.admin %}<a class="btn btn-primary" href="{{ url_for('main.empresa_nova') }}">+ Nova empresa</a>{% endif %}
 </div>
 
 <form class="row g-2 mb-3" method="get">
@@ -49,7 +49,7 @@
           </td>
         </tr>
       {% else %}
-        <tr><td colspan="7" class="text-center text-muted py-4">Nenhuma empresa encontrada. <a href="{{ url_for('main.empresa_nova') }}">Cadastrar empresa</a></td></tr>
+        <tr><td colspan="7" class="text-center text-muted py-4">Nenhuma empresa encontrada.{% if current_user.admin %} <a href="{{ url_for('main.empresa_nova') }}">Cadastrar empresa</a>{% endif %}</td></tr>
       {% endfor %}
       </tbody>
     </table>
