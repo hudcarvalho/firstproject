@@ -4,7 +4,7 @@
   <div class="row g-3 mb-4">
     <div class="col-md-4">
       <label class="form-label">Responsável</label>
-      <select class="form-select" name="responsavel_{{ m.codigo }}">
+      <select class="form-select" name="responsavel_{{ m.codigo }}" {{ 'disabled' if not current_user.admin }}>
         <option value="">— sem responsável —</option>
         {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if c and c.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
       </select>

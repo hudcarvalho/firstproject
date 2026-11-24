@@ -112,6 +112,11 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   período), o **Safra** (lançamentos agrupados por dia, do mais novo ao mais antigo, com os saldos da
   Poupança Plus em aba própria) e o **BMP** (Extrato Geral, com tipo, favorecido/DOC e ID da
   transação). PDFs com estrutura danificada são regravados automaticamente antes da leitura.
+- **Acesso por responsável**: administradores (Cadastros → Usuários → "Administrador") veem e
+  alteram tudo. Os demais usuários veem só as empresas em que o Responsável vinculado ao seu
+  usuário é o responsável (lista de clientes, Obrigações, Distribuição, LALUR, quotas, painel e
+  relatórios); não cadastram empresas nem trocam o responsável. Sem responsável vinculado, não veem
+  nenhuma empresa.
 - **Quotas do IRPJ/CSLL** (*Contábil → Quotas do IRPJ/CSLL (LALUR)*): na apuração de cada período
   do LALUR informa-se se o imposto foi pago em quota única, 2 ou 3 quotas. A tela de quotas filtra
   por ano, período, número de quotas e envio ao cliente. Todo dia 10 do mês de vencimento, um

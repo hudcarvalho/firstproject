@@ -15,9 +15,10 @@
         <option value="">— nenhum —</option>
         {% for r in responsaveis %}<option value="{{ r.id }}" {{ 'selected' if usuario.responsavel_id == r.id }}>{{ r.nome }}</option>{% endfor %}
       </select>
-      <div class="form-text">Habilita o atalho “Minhas empresas” no painel.</div></div>
+      <div class="form-text">Quem não é administrador vê <strong>somente as empresas deste responsável</strong>
+        (onde ele está como responsável no cadastro da empresa). Sem responsável vinculado, não vê nenhuma empresa.</div></div>
     <div class="col-12">
-      <div class="form-check"><input class="form-check-input" type="checkbox" name="admin" id="admin" {{ 'checked' if usuario.admin }}><label class="form-check-label" for="admin">Administrador (acessa parametrização, cadastros e usuários)</label></div>
+      <div class="form-check"><input class="form-check-input" type="checkbox" name="admin" id="admin" {{ 'checked' if usuario.admin }}><label class="form-check-label" for="admin">Administrador (acesso a todo o sistema: todas as empresas, parametrização, cadastros e usuários)</label></div>
       <div class="form-check"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if usuario.ativo }}><label class="form-check-label" for="ativo">Ativo (pode entrar no sistema)</label></div>
     </div>
   </div>

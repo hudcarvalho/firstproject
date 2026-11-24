@@ -12,6 +12,7 @@ from decimal import ROUND_HALF_UP, Decimal
 
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 
+from . import acesso
 from .competencia import parse_valor
 from .models import Empresa, LalurApuracao, LalurLancamento, LalurQuotaEnvio, LalurSaldoInicial, db
 
@@ -175,10 +176,7 @@ def demonstrativos(empresa):
 # ---------------------------------------------------------------- telas
 
 def _empresa(id_):
-    empresa = db.session.get(Empresa, id_)
-    if empresa is None:
-        abort(404)
-    return empresa
+    return acesso.exigir(db.session.get(Empresa, id_))
 
 
 def _ano():
@@ -353,7 +351,7 @@ def lancamento_novo(id, ano, periodo):
 @bp.post("/lancamentos/<int:lid>/remover")
 def lancamento_remover(lid):
     l = db.session.get(LalurLancamento, lid)
-    if l is None:
+    if l is None or not acesso.pode(l.apuracao.empresa_id):
         abort(404)
     a = l.apuracao
     db.session.delete(l)
@@ -794,7 +792,7 @@ def _lucro_do_grupo(grupo, ano):
         c = e.codigo or ""
         return (0, int(c), "") if c.isdigit() else (1, 0, c or e.razao_social)
 
-    empresas = sorted((e for e in grupo.empresas if e.ativo and e.lucro_real), key=chave)
+    empresas = sorted((e for e in grupo.empresas if e.ativo and e.lucro_real and acesso.pode(e.id)), key=chave)
     ids = [e.id for e in empresas]
     valores = {}
     if ids:
@@ -955,8 +953,10 @@ def grupo():
 
     from .models import GrupoEconomico
 
-    grupos = GrupoEconomico.query.order_by(GrupoEconomico.nome).all()
+    grupos = [g for g in GrupoEconomico.query.order_by(GrupoEconomico.nome) if any(acesso.pode(e.id) for e in g.empresas)]
     escolhido = db.session.get(GrupoEconomico, request.args.get("grupo", type=int) or 0)
+    if escolhido is not None and escolhido not in grupos:
+        escolhido = None
     ano = _ano()
     empresas, colunas, valores = _lucro_do_grupo(escolhido, ano) if escolhido else ([], [1, 2, 3, 4], {})
     formato = request.args.get("formato")
@@ -1062,7 +1062,8 @@ def lembretes_pendentes(hoje=None):
     """Quotas de empresas ativas do Lucro Real a enviar (do dia 10 do mês do vencimento em diante)."""
     hoje = hoje or date.today()
     pendentes = []
-    for a in (LalurApuracao.query.join(Empresa).filter(LalurApuracao.quotas.isnot(None), Empresa.ativo.is_(True))):
+    consulta = LalurApuracao.query.join(Empresa).filter(LalurApuracao.quotas.isnot(None), Empresa.ativo.is_(True))
+    for a in acesso.filtrar(consulta):
         if a.empresa.lucro_real:
             pendentes += [q for q in quotas_do_cliente(a) if q.pendente(hoje)]
     return sorted(pendentes, key=lambda q: (q.vencimento, q.apuracao.empresa.razao_social))
@@ -1088,7 +1089,9 @@ def _marcar_envio(apuracao, numero, enviado):
 
 @bp.post("/quotas/<int:apuracao_id>/<int:numero>/envio")
 def quota_envio(apuracao_id, numero):
-    apuracao = db.session.get(LalurApuracao, apuracao_id) or abort(404)
+    apuracao = db.session.get(LalurApuracao, apuracao_id)
+    if apuracao is None or not acesso.pode(apuracao.empresa_id):
+        abort(404)
     _marcar_envio(apuracao, numero, request.form.get("enviado") == "1")
     db.session.commit()
     return _voltar_quotas()
@@ -1103,7 +1106,7 @@ def quotas_enviar_todas():
         except ValueError:
             continue
         apuracao = db.session.get(LalurApuracao, apuracao_id)
-        if apuracao is not None:
+        if apuracao is not None and acesso.pode(apuracao.empresa_id):
             antes = len(apuracao.envios)
             _marcar_envio(apuracao, numero, True)
             marcadas += len(apuracao.envios) - antes
@@ -1114,7 +1117,9 @@ def quotas_enviar_todas():
 
 @bp.post("/quotas/<int:apuracao_id>/definir")
 def quota_definir(apuracao_id):
-    apuracao = db.session.get(LalurApuracao, apuracao_id) or abort(404)
+    apuracao = db.session.get(LalurApuracao, apuracao_id)
+    if apuracao is None or not acesso.pode(apuracao.empresa_id):
+        abort(404)
     definir_quotas(apuracao, request.form.get("quotas"))
     db.session.commit()
     return _voltar_quotas()
@@ -1132,7 +1137,7 @@ def quotas():
     ano = None if situacao == ["pendente"] and not args.get("ano") else _ano()
     periodo = lista("periodo", ("0", "1", "2", "3", "4"))
     filtro_quotas = lista("quotas", ("1", "2", "3", "nao"))
-    consulta = LalurApuracao.query.join(Empresa).filter(Empresa.ativo.is_(True))
+    consulta = acesso.filtrar(LalurApuracao.query.join(Empresa).filter(Empresa.ativo.is_(True)))
     if ano:
         consulta = consulta.filter(LalurApuracao.ano == ano)
     if periodo:

@@ -6,6 +6,7 @@ from decimal import Decimal
 from flask import Blueprint, abort, flash, redirect, render_template, request, url_for
 from sqlalchemy import or_
 
+from . import acesso
 from .competencia import cnpj_valido, cpf_valido, fmt_documento, fmt_valor, parse_valor, so_digitos
 from .models import DistribuicaoLucro, Empresa, Socio, db
 
@@ -15,10 +16,7 @@ MESES = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun", "Jul", "Ago", "Set", "Out", "
 
 
 def _empresa(id_):
-    empresa = db.session.get(Empresa, id_)
-    if empresa is None:
-        abort(404)
-    return empresa
+    return acesso.exigir(db.session.get(Empresa, id_))
 
 
 def _ano():
@@ -54,7 +52,7 @@ def _avisar_soma(empresa):
 
 
 def _clientes_para_busca():
-    return Empresa.query.filter_by(ativo=True).order_by(Empresa.razao_social).all()
+    return acesso.filtrar(Empresa.query.filter_by(ativo=True)).order_by(Empresa.razao_social).all()
 
 
 @bp.route("/")
@@ -65,7 +63,7 @@ def selecionar():
     if busca:
         rotulo = busca.split(" — ", 1)  # valor vindo da lista: "código — razão social"
         codigo = rotulo[0].strip()
-        por_codigo = Empresa.query.filter_by(codigo=codigo).all() if codigo else []
+        por_codigo = acesso.filtrar(Empresa.query.filter_by(codigo=codigo)).all() if codigo else []
         if len(rotulo) == 2:
             por_codigo = [e for e in por_codigo if e.razao_social == rotulo[1].strip()] or por_codigo
         if len(por_codigo) == 1:
@@ -74,7 +72,7 @@ def selecionar():
         filtros = [Empresa.razao_social.ilike(f"%{busca}%"), Empresa.nome_fantasia.ilike(f"%{busca}%")]
         if len(digitos) >= 5:
             filtros.append(Empresa.cnpj.contains(digitos))
-        encontrados = por_codigo or Empresa.query.filter(or_(*filtros)).order_by(
+        encontrados = por_codigo or acesso.filtrar(Empresa.query.filter(or_(*filtros))).order_by(
             Empresa.razao_social).limit(50).all()
         if len(encontrados) == 1:
             return redirect(url_for("distribuicao.empresa", id=encontrados[0].id))
@@ -221,7 +219,7 @@ def quotas(id):
 @bp.post("/socios/<int:socio_id>/situacao")
 def socio_situacao(socio_id):
     socio = db.session.get(Socio, socio_id)
-    if socio is None:
+    if socio is None or not acesso.pode(socio.empresa_id):
         abort(404)
     socio.ativo = not socio.ativo
     db.session.commit()
@@ -252,6 +250,7 @@ def _lancamentos(ano, mes_de, mes_ate, empresa_id=None):
         .filter(DistribuicaoLucro.ano == ano, DistribuicaoLucro.mes.between(mes_de, mes_ate),
                 DistribuicaoLucro.valor != 0)
     )
+    consulta = acesso.filtrar(consulta)
     if empresa_id:
         consulta = consulta.filter(Empresa.id == empresa_id)
     return consulta.order_by(Empresa.razao_social, Empresa.id, Socio.nome, Socio.id,
@@ -305,6 +304,8 @@ def exportar():
     mes_de = _mes("de", 1)
     mes_ate = max(_mes("ate", 12), mes_de)
     empresa = db.session.get(Empresa, request.args.get("empresa", type=int) or 0)
+    if empresa is not None and not acesso.pode(empresa.id):
+        empresa = None
     lancamentos = _lancamentos(ano, mes_de, mes_ate, empresa.id if empresa else None)
     if request.args.get("baixar"):
         if not lancamentos:

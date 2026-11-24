@@ -18,7 +18,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import selectinload
 
-from . import importacao
+from . import acesso, importacao
 from .competencia import (
     cnpj_valido, competencia_do_periodo, parse_competencia, parse_valor, so_digitos,
 )
@@ -81,7 +81,7 @@ def painel(modulo):
     regime_id = _int_or_none(request.args.get("regime"))
     busca = (request.args.get("q") or "").strip()
 
-    q = Empresa.query.filter_by(ativo=True)
+    q = acesso.filtrar(Empresa.query.filter_by(ativo=True))
     if regime_id:
         q = q.filter_by(regime_id=regime_id)
     if busca:
@@ -119,7 +119,7 @@ def painel(modulo):
 @bp.route("/empresas")
 def empresas_lista():
     # Todas as empresas vão para a página; busca e filtros rodam no navegador.
-    empresas = _com_relacionamentos(Empresa.query).order_by(Empresa.razao_social).all()
+    empresas = _com_relacionamentos(acesso.filtrar(Empresa.query)).order_by(Empresa.razao_social).all()
     modulos = Modulo.ativos()
     responsaveis = {}  # por módulo: responsáveis que aparecem na lista
     for m in modulos:
@@ -176,7 +176,8 @@ def _form_empresa(empresa):
     # Responsável e andamento por módulo ativo.
     for m in Modulo.ativos():
         controle = empresa.controle(m, criar=True)
-        controle.responsavel_id = _int_or_none(f.get(f"responsavel_{m.codigo}"))
+        if acesso.acesso_total():  # só administrador troca o responsável (é ele que define quem vê a empresa)
+            controle.responsavel_id = _int_or_none(f.get(f"responsavel_{m.codigo}"))
         bruto = f.get(f"concluido_{m.codigo}")
         controle.concluido_ate = parse_competencia(bruto)
         controle.situacao = _situacao(f, f"situacao_{m.codigo}", f"sem_movimento_{m.codigo}")
@@ -247,9 +248,14 @@ def empresa_nova():
     return _render_form_empresa(empresa)
 
 
+def _empresa(id_):
+    """Empresa do endereço, se o usuário tem acesso a ela (senão 404)."""
+    return acesso.exigir(db.session.get(Empresa, id_))
+
+
 @bp.route("/empresas/<int:id>/editar", methods=["GET", "POST"])
 def empresa_editar(id):
-    empresa = _get(Empresa, id)
+    empresa = _empresa(id)
     if request.method == "POST":
         return _salvar_form_empresa(empresa, nova=False)
     return redirect(url_for("main.empresa_detalhe", id=id))
@@ -258,20 +264,20 @@ def empresa_editar(id):
 @bp.route("/empresas/<int:id>")
 def empresa_detalhe(id):
     """Ao abrir o cliente: aba Cadastro, já pronta para editar (inclui o "escriturada até")."""
-    return _render_form_empresa(_get(Empresa, id))
+    return _render_form_empresa(_empresa(id))
 
 
 @bp.route("/empresas/<int:id>/<modulo>")
 def empresa_modulo(id, modulo):
     """Endereço antigo da empresa dentro do módulo: agora abre a aba Cadastro."""
-    _get(Empresa, id)
+    _empresa(id)
     _modulo(modulo)
     return redirect(url_for("main.empresa_detalhe", id=id))
 
 
 @bp.post("/empresas/<int:id>/<modulo>/observacoes")
 def empresa_observacoes(id, modulo):
-    empresa = _get(Empresa, id)
+    empresa = _empresa(id)
     modulo = _modulo(modulo)
     empresa.observacoes = (request.form.get("observacoes") or "").strip() or None
     db.session.commit()
@@ -281,7 +287,7 @@ def empresa_observacoes(id, modulo):
 
 @bp.post("/empresas/<int:id>/<modulo>/controle")
 def empresa_controle(id, modulo):
-    empresa = _get(Empresa, id)
+    empresa = _empresa(id)
     modulo = _modulo(modulo)
     bruto = request.form.get("concluido_ate")
     comp = parse_competencia(bruto)
@@ -302,7 +308,7 @@ def empresa_controle(id, modulo):
 
 @bp.post("/empresas/<int:id>/<modulo>/entregas")
 def entrega_nova(id, modulo):
-    empresa = _get(Empresa, id)
+    empresa = _empresa(id)
     modulo = _modulo(modulo)
     f = request.form
     obrigacao = db.session.get(Obrigacao, _int_or_none(f.get("obrigacao_id")) or 0)
@@ -358,6 +364,7 @@ def _dados_imposto(entrega, f):
 @bp.post("/entregas/<int:id>/remover")
 def entrega_remover(id):
     entrega = _get(Entrega, id)
+    _empresa(entrega.empresa_id)
     destino = url_for("main.empresa_modulo", id=entrega.empresa_id,
                       modulo=entrega.obrigacao.modulo.codigo)
     db.session.delete(entrega)
