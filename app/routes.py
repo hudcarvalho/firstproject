@@ -677,8 +677,11 @@ def importar_confirmar(token):
     modo = request.form.get("existentes")
     if modo not in importacao.MODOS_EXISTENTES:
         modo = "tudo" if request.form.get("atualizar") == "on" else "ignorar"
+    inativar = []
+    if request.form.get("ausentes_modo") == "inativar":  # "Manter todos ativos" (padrão) não inativa nada
+        inativar = [int(x) for x in request.form.getlist("inativar") if x.isdigit()]
     resultado = importacao.aplicar(previa, importacao.modulo_padrao(), modo_existentes=modo,
-                                   criar_novas=request.form.get("pular_novas") != "on")
+                                   criar_novas=request.form.get("pular_novas") != "on", inativar=inativar)
     os.remove(caminho)
     partes = [f"{resultado['criadas']} empresa(s) cadastrada(s)"]
     if resultado["novas_puladas"]:
@@ -691,6 +694,10 @@ def importar_confirmar(token):
         partes.append(f"{resultado['ignoradas']} já existente(s) mantida(s)")
     if resultado["erros"]:
         partes.append(f"{resultado['erros']} com erro não importada(s)")
+    if resultado["inativadas"]:
+        partes.append(f"{resultado['inativadas']} que não estavam na planilha inativada(s)")
+    elif previa.ausentes:
+        partes.append(f"{len(previa.ausentes)} que não estavam na planilha mantida(s) ativa(s)")
     flash("Importação concluída: " + ", ".join(partes) + ".", "success")
     return redirect(url_for("main.empresas_lista"))
 
