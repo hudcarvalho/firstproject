@@ -86,14 +86,14 @@ def test_importacao_completa(client, app):
         alfa, beta, gama, sem_fins = (por_cnpj[c.replace(".", "").replace("/", "").replace("-", "")]
                                       for c in (C1, C2, C3, C4))
         assert alfa.codigo == "29" and alfa.regime.nome == "Lucro Presumido"
-        assert "Regime na planilha: SIMPLES/ PRESUMIDO EM 2026" in alfa.observacoes
+        assert alfa.observacoes is None  # a importação não escreve em Observações
         assert alfa.controle(contabil).responsavel.nome == "Ellen"
         assert beta.regime.nome == "A definir"
-        assert beta.observacoes.startswith("TEM ECD EM 2024") and "Regime na planilha: Normal" in beta.observacoes
+        assert beta.observacoes is None
         assert gama.razao_social == "EMPRESA GAMA LTDA"
         assert gama.regime.nome == "Lucro Real Trimestral"
         assert gama.controle(contabil).responsavel.nome == "Elis"
-        assert "Responsável na planilha: ELIS / MILEIDE" in gama.observacoes
+        assert gama.observacoes is None
         assert sem_fins.regime.nome == "Imune/Isenta" and sem_fins.controle(contabil) is None
         # Real Trimestral herda as obrigações do Lucro Real
         real = RegimeTributario.query.filter_by(nome="Lucro Real").one()
@@ -193,7 +193,7 @@ def test_importacao_grupo_economico(client, app):
         assert e["ALFA LTDA"].controle(contabil).responsavel.nome == "Ana"
         # novas: criadas com grupo; "NOVO" não vira responsável
         assert e["GAMA LTDA"].grupo.nome == "MAGMA" and e["GAMA LTDA"].controle(contabil) is None
-        assert "Responsável na planilha: NOVO" in e["GAMA LTDA"].observacoes
+        assert e["GAMA LTDA"].observacoes is None
         assert e["DELTA"].grupo is None
         assert sorted(g.nome for g in GrupoEconomico.query) == ["MAGMA", "TBB"]  # "Grupo Antigo" ficou vazio
         assert Responsavel.query.filter_by(nome="Novo").count() == 0
@@ -218,3 +218,16 @@ def test_importacao_sem_cadastrar_novas(client, app):
     assert "1 nova(s) não cadastrada(s)" in r.get_data(as_text=True)
     with app.app_context():
         assert Empresa.query.count() == 1 and Empresa.query.one().grupo.nome == "TBB"
+
+
+def test_migracao_apaga_notas_da_importacao():
+    import importlib.util
+    from pathlib import Path
+    caminho = Path(__file__).parents[1] / "migrations" / "versions" / "0014_limpa_notas_importacao.py"
+    spec = importlib.util.spec_from_file_location("m0014", caminho)
+    mig = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mig)
+    assert mig.limpar("Responsável na planilha: NOVO") is None
+    assert mig.limpar("TEM ECD EM 2024\nRegime na planilha: Normal\nResponsável na planilha: ELIS / MILEIDE") \
+        == "TEM ECD EM 2024"
+    assert mig.limpar("Cliente envia extrato por e-mail") == "Cliente envia extrato por e-mail"
