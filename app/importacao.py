@@ -359,8 +359,7 @@ def _gravar_linha(item, modulo, modo, regimes, responsaveis, grupos, resultado):
     empresa.codigo = item.codigo or empresa.codigo
     empresa.razao_social = item.nome
     empresa.regime = _obter_regime(item.regime or REGIME_A_DEFINIR, regimes)
-    if item.observacoes:
-        empresa.observacoes = item.observacoes
+    # a importação não escreve em Observações: o campo é só para anotações feitas à mão
     if item.grupo:
         empresa.grupo = GrupoEconomico.obter(item.grupo, grupos)
     if item.responsavel and modulo is not None:
