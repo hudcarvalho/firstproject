@@ -401,6 +401,7 @@ def test_observacoes_na_tela_da_empresa(client, app):
     # na lista de clientes a linha fica destacada, com a observação ao passar o mouse
     html = client.get("/empresas").get_data(as_text=True)
     assert 'class="linha-cliente com-observacao" title="Observação: Sócio prefere contato por e-mail.' in html
+    assert 'id="f-obs"' in html and ">Com observação</option>" in html and 'data-obs="1"' in html
     client.post(f"/empresas/{eid}/contabil/observacoes", data={"observacoes": "   "})
     with app.app_context():
         assert db.session.get(Empresa, eid).observacoes is None
