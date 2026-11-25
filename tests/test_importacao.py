@@ -231,3 +231,33 @@ def test_migracao_apaga_notas_da_importacao():
     assert mig.limpar("TEM ECD EM 2024\nRegime na planilha: Normal\nResponsável na planilha: ELIS / MILEIDE") \
         == "TEM ECD EM 2024"
     assert mig.limpar("Cliente envia extrato por e-mail") == "Cliente envia extrato por e-mail"
+
+
+def test_clientes_que_nao_estao_na_planilha(client, app):
+    # sistema com 3 clientes ativos e 1 inativo
+    token = _enviar(client, _xlsx([[1, "ALFA", C1, "", "SIMPLES", "", ""], [2, "BETA", C2, "", "SIMPLES", "", ""],
+                                   [3, "GAMA", C3, "", "SIMPLES", "", ""], [4, "DELTA", C4, "", "SIMPLES", "", ""]]))
+    client.post(f"/importar/{token.split('/')[-1]}/confirmar", data={})
+    with app.app_context():
+        Empresa.query.filter_by(razao_social="DELTA").one().ativo = False
+        db.session.commit()
+        ids = {e.razao_social: e.id for e in Empresa.query}
+    # nova planilha só com ALFA
+    url = _enviar(client, _xlsx([[1, "ALFA", C1, "", "SIMPLES", "", ""]]))
+    html = client.get(url).get_data(as_text=True)
+    assert "Clientes do sistema que não estão na planilha (2)" in html  # BETA e GAMA (DELTA já inativa)
+    assert "Manter todos ativos" in html and "Inativar os marcados abaixo" in html
+    # manter (padrão): nada muda, mesmo se vierem itens marcados
+    r = client.post(f"/importar/{url.split('/')[-1]}/confirmar", data={"inativar": [ids["BETA"]]},
+                    follow_redirects=True)
+    assert "2 que não estavam na planilha mantida(s) ativa(s)" in r.get_data(as_text=True)
+    with app.app_context():
+        assert Empresa.query.filter_by(ativo=True).count() == 3
+    # inativar só a BETA (e um id que não é da lista é ignorado)
+    url = _enviar(client, _xlsx([[1, "ALFA", C1, "", "SIMPLES", "", ""]]))
+    r = client.post(f"/importar/{url.split('/')[-1]}/confirmar",
+                    data={"ausentes_modo": "inativar", "inativar": [ids["BETA"], ids["ALFA"]]}, follow_redirects=True)
+    assert "1 que não estavam na planilha inativada(s)" in r.get_data(as_text=True)
+    with app.app_context():
+        ativo = {e.razao_social: e.ativo for e in Empresa.query}
+        assert ativo == {"ALFA": True, "BETA": False, "GAMA": True, "DELTA": False}

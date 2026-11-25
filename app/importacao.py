@@ -195,6 +195,7 @@ class Previa:
     regimes_novos: list
     responsaveis_novos: list
     grupos_novos: list = field(default_factory=list)
+    ausentes: list = field(default_factory=list)  # empresas ativas do sistema que não estão na planilha
 
     def contagem(self):
         return Counter(l.situacao for l in self.linhas)
@@ -278,7 +279,10 @@ def analisar(registros, colunas):
     grupos_cadastrados = {g.nome.casefold() for g in GrupoEconomico.query}
     grupos_novos = sorted({l.grupo for l in validas if l.grupo
                            and l.grupo.casefold() not in grupos_cadastrados}, key=str.casefold)
-    return Previa(linhas, colunas, regimes_novos, responsaveis_novos, grupos_novos)
+    na_planilha = {l.cnpj for l in linhas if l.cnpj}
+    ausentes = sorted((e for e in existentes.values() if e.ativo and e.cnpj not in na_planilha),
+                      key=lambda e: e.razao_social.casefold())
+    return Previa(linhas, colunas, regimes_novos, responsaveis_novos, grupos_novos, ausentes)
 
 
 # ---------------------------------------------------------------- Gravação
@@ -311,7 +315,7 @@ def _obter_responsavel(nome, cache):
 MODOS_EXISTENTES = ("ignorar", "grupo", "tudo")
 
 
-def aplicar(previa, modulo, modo_existentes="ignorar", criar_novas=True):
+def aplicar(previa, modulo, modo_existentes="ignorar", criar_novas=True, inativar=()):
     """Grava a prévia. Retorna um Counter com o resultado.
 
     modo_existentes (empresas cujo CNPJ já está cadastrado):
@@ -328,6 +332,12 @@ def aplicar(previa, modulo, modo_existentes="ignorar", criar_novas=True):
                 resultado["novas_puladas"] += 1
                 continue
             _gravar_linha(item, modulo, modo_existentes, regimes, responsaveis, grupos, resultado)
+    # empresas que não estão na planilha e foram marcadas para inativar
+    marcadas = set(inativar)
+    for empresa in previa.ausentes:
+        if empresa.id in marcadas and empresa.ativo:
+            empresa.ativo = False
+            resultado["inativadas"] += 1
     db.session.flush()
     GrupoEconomico.remover_vazios()
     db.session.commit()

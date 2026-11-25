@@ -102,16 +102,59 @@
         ({{ previa.grupos_a_alterar()|length }} empresa(s) terão o grupo definido ou alterado; tributação, responsável e demais dados não mudam)</label></div>
     {% endif %}
     <div class="form-check"><input class="form-check-input" type="radio" name="existentes" value="tudo" id="ex-tudo">
-      <label class="form-check-label" for="ex-tudo">Atualizar todos os dados com a planilha (código, nome, tributação, responsável, observações{{ ' e grupo' if tem_grupo }})</label></div>
+      <label class="form-check-label" for="ex-tudo">Atualizar todos os dados com a planilha (código, nome, tributação, responsável{{ ' e grupo' if tem_grupo }})</label></div>
   </div>
   {% endif %}
   {% if cont['nova'] %}
   <div class="form-check mb-3"><input class="form-check-input" type="checkbox" name="pular_novas" id="pular-novas">
     <label class="form-check-label" for="pular-novas">Não cadastrar as {{ cont['nova'] }} empresa(s) que ainda não estão no sistema (só atualizar as existentes)</label></div>
   {% endif %}
+  {% if previa.ausentes %}
+  <div class="mb-3 border rounded p-3 bg-light" id="ausentes">
+    <div class="fw-semibold mb-1">Clientes do sistema que não estão na planilha ({{ previa.ausentes|length }})</div>
+    <div class="small text-muted mb-2">Estão ativos no sistema, mas o CNPJ não aparece nesta planilha. Deseja mantê-los ou inativá-los?
+      Inativar não apaga nada: a empresa só deixa de aparecer entre as ativas e pode ser reativada no cadastro.</div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="ausentes_modo" value="manter" id="aus-manter" checked>
+      <label class="form-check-label" for="aus-manter">Manter todos ativos</label></div>
+    <div class="form-check"><input class="form-check-input" type="radio" name="ausentes_modo" value="inativar" id="aus-inativar">
+      <label class="form-check-label" for="aus-inativar">Inativar os marcados abaixo</label></div>
+    <div class="table-responsive mt-2 d-none" id="lista-ausentes" style="max-height: 320px">
+      <table class="table table-sm align-middle mb-0 bg-white">
+        <thead class="table-light sticky-top"><tr>
+          <th style="width: 40px"><input class="form-check-input" type="checkbox" id="aus-todos" checked aria-label="Marcar todos"></th>
+          <th>Código</th><th>Razão social</th><th>CNPJ</th><th>Tributação</th></tr></thead>
+        <tbody>
+        {% for e in previa.ausentes %}
+          <tr><td><input class="form-check-input aus-item" type="checkbox" name="inativar" value="{{ e.id }}" checked aria-label="Inativar {{ e.razao_social }}"></td>
+            <td class="text-end">{{ e.codigo or '' }}</td><td>{{ e.razao_social }}</td><td class="text-nowrap">{{ e.cnpj_formatado }}</td><td>{{ e.regime.nome }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
   <div class="d-flex gap-2">
     <button class="btn btn-success" onclick="this.disabled=true; this.form.submit();">Confirmar importação</button>
     <a class="btn btn-outline-secondary" href="{{ url_for('main.importar') }}">Cancelar</a>
   </div>
 </form>
+{% endblock %}
+
+{% block scripts %}
+<script>
+(() => {
+  const caixa = document.getElementById('ausentes');
+  if (!caixa) return;
+  const lista = document.getElementById('lista-ausentes'), itens = [...caixa.querySelectorAll('.aus-item')];
+  const todos = document.getElementById('aus-todos');
+  function atualizar() {
+    const inativar = document.getElementById('aus-inativar').checked;
+    lista.classList.toggle('d-none', !inativar);
+    itens.forEach(cx => { cx.disabled = !inativar; });  // "manter": nada é enviado para inativar
+  }
+  caixa.querySelectorAll('input[name=ausentes_modo]').forEach(r => r.addEventListener('change', atualizar));
+  todos.addEventListener('change', () => itens.forEach(cx => { cx.checked = todos.checked; }));
+  atualizar();
+})();
+</script>
 {% endblock %}
