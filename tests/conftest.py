@@ -16,9 +16,9 @@ def app():
         db.drop_all()
 
 
-def criar_usuario(app, email, admin=True, nome="Usuário"):
+def criar_usuario(app, email, admin=True, nome="Usuário", dono=False):
     with app.app_context():
-        u = Usuario(nome=nome, email=email, admin=admin, ativo=True)
+        u = Usuario(nome=nome, email=email, admin=admin, ativo=True, dono=dono)
         u.definir_senha(SENHA)
         db.session.add(u)
         db.session.commit()
@@ -35,8 +35,8 @@ def anonimo(app):
 
 @pytest.fixture
 def client(app):
-    """Cliente autenticado como administrador."""
-    criar_usuario(app, "admin@escritorio.com", admin=True, nome="Admin")
+    """Cliente autenticado como administrador (e dono do sistema)."""
+    criar_usuario(app, "admin@escritorio.com", admin=True, nome="Admin", dono=True)
     c = app.test_client()
     assert entrar(c, "admin@escritorio.com").status_code == 302
     return c

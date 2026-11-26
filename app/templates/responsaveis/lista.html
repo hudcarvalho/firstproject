@@ -11,7 +11,7 @@
   <tbody>
   {% for r in responsaveis %}
     <tr><td>{{ r.nome }}</td><td>{{ r.email or '—' }}</td>
-      {% for m in modulos %}<td><a href="{{ url_for('main.painel', modulo=m.codigo, responsavel=r.id) }}">{{ r.empresas_ativas(m) | length }}</a></td>{% endfor %}
+      {% for m in modulos %}<td>{% if current_user.dono %}<a href="{{ url_for('main.painel', modulo=m.codigo, responsavel=r.id) }}">{{ r.empresas_ativas(m) | length }}</a>{% else %}{{ r.empresas_ativas(m) | length }}{% endif %}</td>{% endfor %}
       <td>{{ badge_ativo(r.ativo) }}</td>
       <td class="text-end"><a class="btn btn-sm btn-outline-primary" href="{{ url_for('main.responsavel_form', id=r.id) }}">Editar</a></td></tr>
   {% else %}
