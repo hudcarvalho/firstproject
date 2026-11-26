@@ -53,7 +53,7 @@ def _dados(ano, inativas=False):
 def lista():
     ano = _ano()
     empresas, registros = _dados(ano)
-    regimes = sorted({e.regime for e in empresas}, key=lambda r: r.nome.lower())
+    regimes = sorted({e.regime for e in empresas if e.regime}, key=lambda r: r.nome.lower())
     modulo = _modulo_responsavel()
     responsavel = {e.id: _responsavel(e, modulo) for e in empresas}
     responsaveis = sorted({r for r in responsavel.values() if r}, key=lambda r: r.nome.lower())
@@ -127,7 +127,7 @@ def exportar():
         r = registros.get(e.id)
         resp = _responsavel(e, modulo)
         codigo = int(e.codigo) if (e.codigo or "").strip().isdigit() else e.codigo
-        ws.append([codigo, e.razao_social, fmt_documento(e.cnpj), e.regime.nome.upper(), resp.nome if resp else None]
+        ws.append([codigo, e.razao_social, fmt_documento(e.cnpj), e.regime.nome.upper() if e.regime else None, resp.nome if resp else None]
                   + [getattr(r, c) if r else None for c in ObrigacaoAnual.CAMPOS_DATA]
                   + [r.observacao if r else None])
         for col in range(6, 10):

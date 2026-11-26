@@ -38,7 +38,7 @@
           <td><a href="{{ link }}" class="fw-semibold text-decoration-none">{{ e.nome_exibicao }}</a>
             {% if e.nome_fantasia %}<div class="small text-muted">{{ e.razao_social }}</div>{% endif %}</td>
           <td class="text-nowrap">{{ e.cnpj_formatado }}</td>
-          <td>{{ e.regime.nome }}</td>
+          <td>{{ e.regime.nome if e.regime else '' }}</td>
           <td>{{ l.controle.responsavel.nome if l.controle and l.controle.responsavel else '—' }}</td>
           <td class="text-nowrap">{{ (l.controle.concluido_ate if l.controle) | competencia }} {{ badge_atraso(l.atraso) }}</td>
           <td class="text-nowrap">

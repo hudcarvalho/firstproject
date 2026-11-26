@@ -16,7 +16,7 @@ from .models import Empresa, GrupoEconomico, Modulo, RegimeTributario, Responsav
 
 EXTENSOES = {".xls", ".xlsx", ".csv"}
 
-REGIME_A_DEFINIR = "A definir"
+REGIME_A_DEFINIR = "— em branco —"  # só para exibir na prévia: a empresa fica sem tributação
 REGIME_REAL_TRIMESTRAL = "Lucro Real Trimestral"
 
 # Nome normalizado do cabeçalho -> campo
@@ -273,7 +273,7 @@ def analisar(registros, colunas):
         linhas.append(item)
 
     validas = [l for l in linhas if l.situacao != "erro"]
-    regimes_novos = sorted({l.regime or REGIME_A_DEFINIR for l in validas} - regimes_cadastrados)
+    regimes_novos = sorted({l.regime for l in validas if l.regime} - regimes_cadastrados)
     responsaveis_novos = sorted({l.responsavel for l in validas if l.responsavel
                                  and _normalizar(l.responsavel) not in responsaveis_cadastrados})
     grupos_cadastrados = {g.nome.casefold() for g in GrupoEconomico.query}
@@ -288,6 +288,8 @@ def analisar(registros, colunas):
 # ---------------------------------------------------------------- Gravação
 
 def _obter_regime(nome, cache):
+    if not nome:
+        return None  # tributação não identificada: fica em branco
     if nome not in cache:
         regime = RegimeTributario(nome=nome, ativo=True)
         if nome == REGIME_REAL_TRIMESTRAL:
@@ -295,8 +297,6 @@ def _obter_regime(nome, cache):
             base = cache.get("Lucro Real")
             if base:
                 regime.obrigacoes = list(base.obrigacoes)
-        elif nome == REGIME_A_DEFINIR:
-            regime.descricao = "Empresas importadas sem tributação identificada — reclassifique"
         else:
             regime.descricao = "Criado na importação"
         db.session.add(regime)
@@ -368,7 +368,7 @@ def _gravar_linha(item, modulo, modo, regimes, responsaveis, grupos, resultado):
         resultado["criadas"] += 1
     empresa.codigo = item.codigo or empresa.codigo
     empresa.razao_social = item.nome
-    empresa.regime = _obter_regime(item.regime or REGIME_A_DEFINIR, regimes)
+    empresa.regime = _obter_regime(item.regime, regimes)
     # a importação não escreve em Observações: o campo é só para anotações feitas à mão
     if item.grupo:
         empresa.grupo = GrupoEconomico.obter(item.grupo, grupos)

@@ -160,7 +160,7 @@ class Empresa(db.Model):
     inscricao_municipal = db.Column(db.String(30))
     email = db.Column(db.String(120))
     telefone = db.Column(db.String(30))
-    regime_id = db.Column(db.Integer, db.ForeignKey("regime_tributario.id"), nullable=False)
+    regime_id = db.Column(db.Integer, db.ForeignKey("regime_tributario.id"))  # vazio = tributação em branco
     grupo_id = db.Column(db.Integer, db.ForeignKey("grupo_economico.id"), index=True)
     observacoes = db.Column(db.Text)
     ativo = db.Column(db.Boolean, default=True, nullable=False)
@@ -210,6 +210,8 @@ class Empresa(db.Model):
 
     def obrigacoes_aplicaveis(self, modulo):
         """Obrigações ativas do módulo exigidas pela tributação (regime) da empresa."""
+        if self.regime is None:
+            return []
         return sorted((o for o in self.regime.obrigacoes_do_modulo(modulo) if o.ativo),
                       key=lambda o: o.nome)
 

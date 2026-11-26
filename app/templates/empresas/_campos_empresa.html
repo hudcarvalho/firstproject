@@ -42,9 +42,9 @@
   <h2 class="h6 text-uppercase text-muted">Tributação</h2>
   <div class="row g-3 mb-4">
     <div class="col-md-4">
-      <label class="form-label">Tributação *</label>
-      <select class="form-select" name="regime_id" {{ 'required' if current_user.admin else 'disabled' }}>
-        <option value="">Selecione…</option>
+      <label class="form-label">Tributação</label>
+      <select class="form-select" name="regime_id" {{ '' if current_user.admin else 'disabled' }}>
+        <option value="">— em branco —</option>
         {% for r in regimes %}<option value="{{ r.id }}" {{ 'selected' if empresa.regime_id == r.id or (empresa.regime and empresa.regime.id == r.id) }}>{{ r.nome }}</option>{% endfor %}
       </select>
       <div class="form-text">Define as obrigações padrão da empresa em cada módulo.</div>

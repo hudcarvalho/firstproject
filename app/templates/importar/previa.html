@@ -28,8 +28,8 @@
       <tr><td>{{ nome }}{% if nome in previa.regimes_novos %} <span class="badge text-bg-info">será criado</span>{% endif %}</td><td class="text-end">{{ n }}</td></tr>
       {% endfor %}
     </table>
-    {% if 'A definir' in previa.regimes() %}
-    <div class="card-footer small text-muted">“A definir”: o texto da planilha não indica a tributação (ex.: “Normal”). O texto original fica nas observações; ajuste depois no cadastro da empresa.</div>
+    {% if '— em branco —' in previa.regimes() %}
+    <div class="card-footer small text-muted">“Em branco”: o texto da planilha não indica a tributação (ex.: “Normal”); a empresa fica sem tributação e você ajusta depois no cadastro.</div>
     {% endif %}
   </div></div>
   <div class="col-lg-6"><div class="card h-100">
@@ -81,7 +81,7 @@
     <thead class="table-light sticky-top"><tr><th>Linha</th><th>Código</th><th>Nome</th><th>CNPJ</th><th>Tributação</th><th>Responsável</th><th>Grupo</th><th>Situação</th></tr></thead>
     {% for l in previa.linhas %}
     <tr><td>{{ l.linha }}</td><td>{{ l.codigo }}</td><td>{{ l.nome }}</td><td class="text-nowrap">{{ l.cnpj_formatado }}</td>
-      <td>{{ l.regime or 'A definir' }}</td><td>{{ l.responsavel or '—' }}</td><td>{{ l.grupo or '' }}</td>
+      <td>{{ l.regime or '— em branco —' }}</td><td>{{ l.responsavel or '—' }}</td><td>{{ l.grupo or '' }}</td>
       <td>{% if l.situacao == 'nova' %}<span class="badge text-bg-success">nova</span>{% elif l.situacao == 'existente' %}<span class="badge text-bg-secondary">já cadastrada</span>{% else %}<span class="badge text-bg-danger">erro</span>{% endif %}</td></tr>
     {% endfor %}
   </table>
@@ -126,7 +126,7 @@
         <tbody>
         {% for e in previa.ausentes %}
           <tr><td><input class="form-check-input aus-item" type="checkbox" name="inativar" value="{{ e.id }}" checked aria-label="Inativar {{ e.razao_social }}"></td>
-            <td class="text-end">{{ e.codigo or '' }}</td><td>{{ e.razao_social }}</td><td class="text-nowrap">{{ e.cnpj_formatado }}</td><td>{{ e.regime.nome }}</td></tr>
+            <td class="text-end">{{ e.codigo or '' }}</td><td>{{ e.razao_social }}</td><td class="text-nowrap">{{ e.cnpj_formatado }}</td><td>{{ e.regime.nome if e.regime else '' }}</td></tr>
         {% endfor %}
         </tbody>
       </table>
