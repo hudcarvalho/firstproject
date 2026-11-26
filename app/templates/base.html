@@ -79,6 +79,11 @@
   </div>
 </nav>
 <main class="container-fluid px-4 pb-5">
+  {% set ep_atual = request.endpoint or '' %}
+  {% if current_user.is_authenticated and ep_atual not in ('main.empresas_lista', 'auth.login', 'auth.primeiro_acesso') %}
+  {# volta à lista de clientes com os mesmos filtros, ordem e posição (script abaixo) #}
+  <a class="btn btn-sm btn-outline-secondary mt-3 mb-2 voltar-clientes" href="{{ url_for('main.empresas_lista') }}">&larr; Voltar aos clientes</a>
+  {% endif %}
   {% if lembrete_quotas %}
   <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 py-2 mt-2" id="lembrete-quotas">
     🔔 <strong>Lembrete:</strong> {{ lembrete_quotas }} quota(s) de IRPJ/CSLL para enviar ao cliente.
