@@ -32,8 +32,6 @@ def test_informar_quotas_na_apuracao(client, app, lr):
     with app.app_context():
         ap = LalurApuracao.query.filter_by(empresa_id=a, ano=2026, periodo=1).one()
         assert [q.vencimento for q in quotas_do_cliente(ap)] == [date(2026, 4, 30), date(2026, 5, 29), date(2026, 6, 30)]
-    # a guia já abre parcelada em 3
-    assert "3 quotas" in client.get(f"/lalur/{a}/2026/1/guia").get_data(as_text=True)
     # anual: só quota única
     _apurar(client, lr[1], 2025, 0, "3")
     with app.app_context():

@@ -148,7 +148,7 @@ def test_exportar_pdf_e_excel(client, app, empresa_lr):
     assert lanc[5] == ("1º trim.", "Adição", "Multas e ação fiscal", "IRPJ e CSLL", 1000)
 
 
-def test_guia_darf_quotas_e_pdf(client, app, empresa_lr):
+def test_quotas_vencimentos_e_juros(client, app, empresa_lr):
     from datetime import date
 
     from app.guia_darf import quotas, ultimo_dia_util
@@ -163,17 +163,9 @@ def test_guia_darf_quotas_e_pdf(client, app, empresa_lr):
     assert quotas(D("5000"), 2026, 0, 3)[0][0].vencimento == date(2027, 3, 31)
 
     url = f"/lalur/{empresa_lr}/2026/2"
-    assert client.get(f"{url}/guia").status_code == 302  # nada apurado
     client.post(url, data={"lucro_antes": "70.455,22"})
-    assert "Guia (DARF)" in client.get(url).get_data(as_text=True)
-    tela = client.get(f"{url}/guia?forma=parcelado&parcelas=3").get_data(as_text=True)
-    assert "0220" in tela and "6012" in tela and "3ª de 3" in tela and "Selic + 1%" in tela
-    assert "código de barras" in tela
-    r = client.get(f"{url}/guia?forma=unica&baixar=1")
-    assert r.mimetype == "application/pdf" and r.data.startswith(b"%PDF")
-    assert "darf_dados_2120_2026_2tri_unica.pdf" in r.headers["Content-Disposition"]
-    assert b"11.613,80" in r.data and "NÃO é documento de arrecadação".encode("cp1252") in r.data
-
+    assert "Guia (DARF)" not in client.get(url).get_data(as_text=True)  # botão removido
+    assert client.get(f"{url}/guia").status_code == 404
 
 def test_lucro_por_grupo_economico(client, app):
     from io import BytesIO
