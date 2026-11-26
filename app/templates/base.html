@@ -17,18 +17,20 @@
       {% set ep = request.endpoint or '' %}
       {% set mod_atual = (request.view_args or {}).get('modulo') %}
       <ul class="navbar-nav">
-        {% for m in modulos_ativos %}
+        {% for m in modulos_ativos if current_user.dono or m.codigo == 'contabil' %}
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle {{ 'active' if mod_atual == m.codigo or (m.codigo == 'contabil' and ep in ('distribuicao.exportar', 'lalur.grupo', 'lalur.quotas')) }}" href="#" data-bs-toggle="dropdown">{{ m.nome }}</a>
           <ul class="dropdown-menu">
+            {% if current_user.dono %}
             <li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo) }}">Painel</a></li>
             {% if current_user.responsavel_id %}<li><a class="dropdown-item" href="{{ url_for('main.painel', modulo=m.codigo, responsavel=current_user.responsavel_id) }}">Minhas empresas</a></li>{% endif %}
             <li><hr class="dropdown-divider"></li>
             <li><h6 class="dropdown-header">Parametrização</h6></li>
             <li><a class="dropdown-item" href="{{ url_for('main.obrigacoes_lista', modulo=m.codigo) }}">Obrigações</a></li>
             <li><a class="dropdown-item" href="{{ url_for('main.matriz', modulo=m.codigo) }}">Obrigações × Tributação</a></li>
+            {% endif %}
             {% if m.codigo == 'contabil' %}
-            <li><hr class="dropdown-divider"></li>
+            {% if current_user.dono %}<li><hr class="dropdown-divider"></li>{% endif %}
             <li><h6 class="dropdown-header">Relatórios</h6></li>
             <li><a class="dropdown-item" href="{{ url_for('distribuicao.exportar') }}">Exportar distribuição de lucros (Excel)</a></li>
             <li><a class="dropdown-item" href="{{ url_for('lalur.grupo') }}">Lucro por grupo econômico (Excel/PDF)</a></li>

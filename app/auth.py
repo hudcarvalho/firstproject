@@ -26,6 +26,8 @@ ENDPOINTS_ADMIN = {
     "main.observacoes_limpar", "main.empresa_nova",
 }
 ENDPOINTS_ADMIN_SO_POST = {"main.matriz"}  # qualquer um vê; só admin salva
+# Painel e parametrização dos módulos: só o dono do sistema (para os demais, a tela "não existe")
+ENDPOINTS_DONO = {"main.painel", "main.obrigacoes_lista", "main.obrigacao_form", "main.matriz"}
 
 # Proteção simples contra tentativa e erro de senha (por e-mail, em memória).
 MAX_TENTATIVAS = 5
@@ -50,6 +52,8 @@ def init_auth(app):
             return redirect(url_for("auth.primeiro_acesso"))
         if not current_user.is_authenticated:
             return login_manager.unauthorized()
+        if ep in ENDPOINTS_DONO and not current_user.dono:
+            abort(404)
         precisa_admin = ep in ENDPOINTS_ADMIN or (
             ep in ENDPOINTS_ADMIN_SO_POST and request.method == "POST")
         if precisa_admin and not current_user.admin:

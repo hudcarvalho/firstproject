@@ -15,7 +15,7 @@ def test_primeiro_acesso_cria_admin_e_depois_fecha(anonimo, app):
     with app.app_context():
         u = Usuario.query.one()
         assert u.admin and u.email == "hud@escritorio.com" and u.senha_hash != SENHA
-    assert anonimo.get("/contabil/").status_code == 200  # já entra logado
+    assert anonimo.get("/empresas").status_code == 200  # já entra logado
     assert anonimo.get("/primeiro-acesso").status_code == 302
 
 
@@ -33,9 +33,9 @@ def test_login_obrigatorio_e_logout(anonimo, app):
     assert r.status_code == 302 and "/login" in r.headers["Location"]
     assert "incorretos" in entrar(anonimo, "ana@x.com", "errada").get_data(as_text=True)
     assert entrar(anonimo, "ana@x.com").status_code == 302
-    assert anonimo.get("/contabil/").status_code == 200
+    assert anonimo.get("/empresas").status_code == 200
     anonimo.post("/logout")
-    assert anonimo.get("/contabil/").status_code == 302
+    assert anonimo.get("/empresas").status_code == 302
 
 
 def test_usuario_inativo_nao_entra(anonimo, app):
@@ -63,12 +63,26 @@ def test_next_externo_ignorado(anonimo, app):
 def test_usuario_comum_nao_acessa_parametrizacao(anonimo, app):
     criar_usuario(app, "ana@x.com", admin=False)
     entrar(anonimo, "ana@x.com")
-    for url in ["/usuarios", "/modulos", "/regimes", "/responsaveis", "/contabil/obrigacoes/nova"]:
+    for url in ["/usuarios", "/modulos", "/regimes", "/responsaveis"]:
         assert anonimo.get(url).status_code == 403, url
-    assert anonimo.get("/contabil/matriz").status_code == 200
-    assert anonimo.post("/contabil/matriz", data={}).status_code == 403
-    html = anonimo.get("/contabil/").get_data(as_text=True)
-    assert "Usuários" not in html
+    # painel e parametrização: só o dono do sistema (para os demais, a tela "não existe")
+    for url in ["/contabil/", "/contabil/obrigacoes", "/contabil/obrigacoes/nova", "/contabil/matriz"]:
+        assert anonimo.get(url).status_code == 404, url
+    html = anonimo.get("/empresas").get_data(as_text=True)
+    assert "Usuários" not in html and "Parametrização" not in html and ">Painel<" not in html
+    assert "Quotas do IRPJ/CSLL" in html  # os relatórios continuam no menu Contábil
+
+
+def test_admin_que_nao_e_dono_nao_ve_painel_nem_parametrizacao(app, client):
+    criar_usuario(app, "outro@x.com", admin=True)
+    c = app.test_client()
+    entrar(c, "outro@x.com")
+    assert c.get("/contabil/").status_code == 404 and c.get("/contabil/matriz").status_code == 404
+    assert "Parametrização" not in c.get("/empresas").get_data(as_text=True)
+    # o dono continua vendo
+    html = client.get("/empresas").get_data(as_text=True)
+    assert "Parametrização" in html and ">Painel<" in html
+    assert client.get("/contabil/").status_code == 200
 
 
 def test_admin_cadastra_usuario(client, app):
