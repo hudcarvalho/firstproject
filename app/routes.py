@@ -126,7 +126,7 @@ def empresas_lista():
         nomes = {c.responsavel for e in empresas for c in e.controles
                  if c.modulo_id == m.id and c.responsavel}
         responsaveis[m.codigo] = sorted(nomes, key=lambda r: r.nome.lower())
-    regimes = sorted({e.regime for e in empresas}, key=lambda r: r.nome.lower())
+    regimes = sorted({e.regime for e in empresas if e.regime}, key=lambda r: r.nome.lower())
     grupos = sorted({e.grupo for e in empresas if e.grupo}, key=lambda g: g.nome.lower())
     # Distribuição de lucros lançada no ano atual: {empresa_id: total}
     ano = date.today().year
@@ -178,7 +178,7 @@ def empresas_exportar():
         c.alignment = Alignment(vertical="center", wrap_text=True)
     for e in empresas:
         linha = [int(e.codigo) if (e.codigo or "").strip().isdigit() else e.codigo, e.razao_social, e.nome_fantasia,
-                 e.cnpj_formatado, e.grupo.nome if e.grupo else None, e.regime.nome]
+                 e.cnpj_formatado, e.grupo.nome if e.grupo else None, e.regime.nome if e.regime else None]
         for m in modulos:
             c = e.controle(m)
             linha += [c.responsavel.nome if c and c.responsavel else None,
@@ -216,8 +216,6 @@ def _form_empresa(empresa):
     # tributação e "empresa ativa": só administrador altera (usuário comum só visualiza)
     admin = acesso.acesso_total()
     regime = db.session.get(RegimeTributario, _int_or_none(f.get("regime_id")) or 0) if admin else empresa.regime
-    if regime is None:
-        erros.append("Selecione a tributação.")
 
     empresa.codigo = f.get("codigo", "").strip() or None
     empresa.razao_social = f.get("razao_social", "").strip()

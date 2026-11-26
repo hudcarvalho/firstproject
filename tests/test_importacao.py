@@ -88,7 +88,7 @@ def test_importacao_completa(client, app):
         assert alfa.codigo == "29" and alfa.regime.nome == "Lucro Presumido"
         assert alfa.observacoes is None  # a importação não escreve em Observações
         assert alfa.controle(contabil).responsavel.nome == "Ellen"
-        assert beta.regime.nome == "A definir"
+        assert beta.regime is None  # tributação não identificada fica em branco
         assert beta.observacoes is None
         assert gama.razao_social == "EMPRESA GAMA LTDA"
         assert gama.regime.nome == "Lucro Real Trimestral"

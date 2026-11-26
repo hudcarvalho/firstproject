@@ -453,3 +453,21 @@ def test_exportar_clientes_em_excel(client, app):
                                                           "Ana", "06/2026", "Sim")
     # sem clientes visíveis: só o cabeçalho
     assert load_workbook(BytesIO(client.post("/empresas/exportar", data={"ids": ""}).data)).active.max_row == 1
+
+
+def test_tributacao_em_branco(client, app):
+    eid = _cadastrar(client, app)
+    client.post(f"/empresas/{eid}/editar", data={"razao_social": "ACME Ltda", "cnpj": CNPJ, "regime_id": "",
+                                                "ativo": "on"})
+    with app.app_context():
+        e = db.session.get(Empresa, eid)
+        assert e.regime is None and e.obrigacoes_aplicaveis(_modulo("contabil")) == []
+    html = client.get("/empresas").get_data(as_text=True)
+    assert 'data-regime="0"' in html and '<option value="0">— em branco —</option>' in html
+    assert '<option value="">— em branco —</option>' in client.get(f"/empresas/{eid}").get_data(as_text=True)
+    assert client.get("/obrigacoes/").status_code == 200 and client.get("/contabil/").status_code == 200
+    from io import BytesIO
+    from openpyxl import load_workbook
+    ws = load_workbook(BytesIO(client.post("/empresas/exportar", data={"ids": str(eid)}).data)).active
+    assert ws["F2"].value is None
+

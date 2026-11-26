@@ -36,6 +36,7 @@
       <th><select class="form-select form-select-sm" id="f-regime">
         <option value="">Todas</option>
         {% for r in regimes %}<option value="{{ r.id }}">{{ r.nome }}</option>{% endfor %}
+        <option value="0">— em branco —</option>
       </select></th>
       <th><select class="form-select form-select-sm" id="f-resp" aria-label="Filtrar responsável">
         <option value="">Todos</option>
@@ -54,11 +55,11 @@
   <tbody>
     {% for e in empresas %}{% set r = registros.get(e.id) %}
     <tr data-id="{{ e.id }}" data-codigo="{{ (e.codigo or '')|lower }}" data-nome="{{ e.razao_social|lower }}"
-        data-cnpj="{{ e.cnpj }}" data-regime="{{ e.regime_id }}" data-resp="{{ responsavel[e.id].id if responsavel[e.id] else 0 }}">
+        data-cnpj="{{ e.cnpj }}" data-regime="{{ e.regime_id or 0 }}" data-resp="{{ responsavel[e.id].id if responsavel[e.id] else 0 }}">
       <td class="text-end">{{ e.codigo or '' }}</td>
       <td style="min-width: 260px"><a href="{{ url_for('main.empresa_detalhe', id=e.id) }}" class="link-dark text-decoration-none">{{ e.razao_social }}</a></td>
       <td class="text-nowrap">{{ e.cnpj|documento }}</td>
-      <td class="text-nowrap">{{ e.regime.nome|upper }}</td>
+      <td class="text-nowrap">{{ e.regime.nome|upper if e.regime else '' }}</td>
       <td class="text-nowrap" style="min-width: 150px">{{ responsavel[e.id].nome if responsavel[e.id] else '—' }}</td>
       {% for c in ('defis', 'ecd', 'ecf', 'ibge') %}
       <td class="p-0"><input type="text" class="form-control form-control-sm celula data text-center" data-campo="{{ c }}"

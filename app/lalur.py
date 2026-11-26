@@ -400,7 +400,7 @@ def _pdf(empresa, ano, periodos):
         doc.texto(direita, 40, f"Exercício {ano}", 11, negrito=True, alinhar="direita")
         doc.texto(margem, 56, empresa.razao_social, 10)
         info = " · ".join(x for x in [f"Cód. {empresa.codigo}" if empresa.codigo else "",
-                                       f"CNPJ {empresa.cnpj_formatado}", empresa.regime.nome] if x)
+                                       f"CNPJ {empresa.cnpj_formatado}", empresa.regime.nome if empresa.regime else ""] if x)
         doc.texto(margem, 69, info, 8.5, cinza=0.35)
         doc.linha(margem, 76, direita, 76, 1, 0.3)
         doc.texto(margem, doc.altura_pagina - 24,
@@ -519,7 +519,7 @@ def _excel(empresa, ano, periodos):
         ws.append(["LALUR — Livro de Apuração do Lucro Real", None, f"Exercício {ano}"])
         ws["A1"].font = Font(bold=True, size=13)
         ws.append([empresa.razao_social])
-        ws.append([f"Cód. {empresa.codigo or '-'} · CNPJ {empresa.cnpj_formatado} · {empresa.regime.nome}"])
+        ws.append([f"Cód. {empresa.codigo or '-'} · CNPJ {empresa.cnpj_formatado} · {empresa.regime.nome if empresa.regime else '—'}"])
         ws.append([])
 
     wb = Workbook()
