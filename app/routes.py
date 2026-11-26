@@ -213,7 +213,9 @@ def _form_empresa(empresa):
         existente = Empresa.query.filter_by(cnpj=cnpj).first()
         if existente and existente.id != empresa.id:
             erros.append(f"CNPJ já cadastrado para {existente.razao_social}.")
-    regime = db.session.get(RegimeTributario, _int_or_none(f.get("regime_id")) or 0)
+    # tributação e "empresa ativa": só administrador altera (usuário comum só visualiza)
+    admin = acesso.acesso_total()
+    regime = db.session.get(RegimeTributario, _int_or_none(f.get("regime_id")) or 0) if admin else empresa.regime
     if regime is None:
         erros.append("Selecione a tributação.")
 
@@ -228,12 +230,13 @@ def _form_empresa(empresa):
     empresa.regime = regime
     empresa.observacoes = f.get("observacoes", "").strip() or None
     empresa.grupo = GrupoEconomico.obter(f.get("grupo"))
-    empresa.ativo = f.get("ativo") == "on"
+    if admin:
+        empresa.ativo = f.get("ativo") == "on"
 
     # Responsável e andamento por módulo ativo.
     for m in Modulo.ativos():
         controle = empresa.controle(m, criar=True)
-        if acesso.acesso_total():  # só administrador troca o responsável (é ele que define quem vê a empresa)
+        if admin:  # só administrador troca o responsável (é ele que define quem vê a empresa)
             controle.responsavel_id = _int_or_none(f.get(f"responsavel_{m.codigo}"))
         bruto = f.get(f"concluido_{m.codigo}")
         controle.concluido_ate = parse_competencia(bruto)

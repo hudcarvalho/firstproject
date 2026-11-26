@@ -82,6 +82,22 @@ def test_usuario_comum_nao_troca_o_responsavel(cenario, app):
         assert ctl.responsavel_id == ids["ana"] and ctl.concluido_ate == date(2026, 8, 1)
 
 
+def test_usuario_comum_nao_altera_tributacao_nem_ativa(cenario, app):
+    c, ids = cenario
+    html = c.get(f"/empresas/{ids['a']}").get_data(as_text=True)
+    assert 'name="regime_id" disabled' in html and 'name="ativo" id="ativo" checked disabled' in html
+    with app.app_context():
+        presumido = RegimeTributario.query.filter_by(nome="Lucro Presumido").one().id
+    # tenta mudar a tributação e inativar (sem "ativo") enviando direto
+    r = c.post(f"/empresas/{ids['a']}/editar", data={"razao_social": "EMPRESA DA ANA", "cnpj": "11.222.333/0001-81",
+                                                    "regime_id": presumido, "concluido_contabil": "2026-09"})
+    assert r.status_code == 302
+    with app.app_context():
+        e = db.session.get(Empresa, ids["a"])
+        assert e.regime.nome == "Lucro Real" and e.ativo
+        assert e.controle(Modulo.query.filter_by(codigo="contabil").one()).concluido_ate == date(2026, 9, 1)
+
+
 def test_sem_responsavel_vinculado_nao_ve_nada(cenario, app):
     c = app.test_client()
     entrar(c, "sem@escritorio.com")
