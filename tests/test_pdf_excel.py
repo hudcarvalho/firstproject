@@ -693,3 +693,66 @@ def test_extrato_bmp_organizado(client):
         ("02/09", "ENVIO PIX (09h00)", "3", "FORNECEDOR X", "PIX enviado", None, 499.7, 1000),
     ]
     assert [wb["Resumo"].cell(i, 3).value for i in (4, 7)] == [1000, 1000]
+
+
+def _pdf_caixa_mes(mes, saldo_ini, lancs):
+    """Extrato da Caixa (mesma conta) de um mês, com saldos encadeados."""
+    doc = Documento("Extrato")
+    linhas = ["01/02/2021 Internet Banking CAIXA", "Extrato por período", "Cliente: PADARIA TESTE",
+              "Conta: 0239 / 003 / 00001234-5", f"Mês: {mes}/2021", "Período: 1 - 28", "Extrato",
+              "Data Mov. Nr. Doc. Histórico Valor Saldo",
+              f"000000 SALDO ANTERIOR 0,00 {saldo_ini:.2f} C".replace(".", ",")]
+    saldo = saldo_ini
+    for data, hist, valor in lancs:
+        saldo += valor
+        cd = "C" if valor > 0 else "D"
+        linhas.append(f"{data} 000000 {hist} {abs(valor):.2f} {cd} {saldo:.2f} C".replace(".", ","))
+    for i, l in enumerate(linhas):
+        doc.texto(40, 40 + i * 14, l, 9)
+    return doc.gerar()
+
+
+def _enviar_varios(client, arquivos, **extra):
+    data = {"arquivo": [(BytesIO(c), n) for n, c in arquivos], "numeros": "on", **extra}
+    r = client.post("/ferramentas/pdf-excel", data=data, content_type="multipart/form-data")
+    assert r.status_code == 200, r.get_data(as_text=True)[:500]
+    return r, load_workbook(BytesIO(r.data))
+
+
+def test_varios_extratos_da_mesma_conta_viram_um_so(client):
+    fev = _pdf_caixa_mes("Fevereiro", 600, [("02/02/2021", "CR VD CART", 50), ("10/02/2021", "DEB.IOF", -10)])
+    jan = _pdf_caixa_mes("Janeiro", 500, [("05/01/2021", "CR VD CART", 150), ("20/01/2021", "DEB.IOF", -50)])
+    r, wb = _enviar_varios(client, [("fev.pdf", fev), ("jan.pdf", jan)])  # fora de ordem
+    assert "unificado_2_arquivos.xlsx" in r.headers["Content-Disposition"]
+    assert wb.sheetnames == ["Resumo", "Extrato"]
+    ext = wb["Extrato"]
+    datas = [ext.cell(r_, 1).value.strftime("%d/%m") for r_ in range(6, 10)]
+    assert datas == ["05/01", "20/01", "02/02", "10/02"]  # janeiro antes de fevereiro
+    assert ext["G5"].value == 500 and ext["G4"].value == "Saldo (R$)"  # saldo anterior do primeiro mês
+    assert wb["Resumo"]["C7"].value == 640  # saldo final do último mês
+
+
+def test_varios_pdfs_comuns_numa_aba_ou_uma_por_arquivo(client):
+    r, wb = _enviar_varios(client, [("balancete A.pdf", _pdf_relatorio()), ("balancete B.pdf", _pdf_relatorio())],
+                           modo="layout")
+    assert wb.sheetnames == ["PDFs unificados"]
+    ws = wb["PDFs unificados"]
+    arquivos = {ws.cell(r_, 1).value for r_ in range(2, ws.max_row + 1)}
+    assert ws["A1"].value == "Arquivo" and arquivos == {"balancete A.pdf", "balancete B.pdf"}
+    r, wb = _enviar_varios(client, [("balancete A.pdf", _pdf_relatorio()), ("balancete A.pdf", _pdf_relatorio())],
+                           modo="layout", aba_por_arquivo="on")
+    assert wb.sheetnames == ["balancete A", "balancete A 2"]
+
+
+def test_contas_diferentes_e_pdf_comum_no_mesmo_arquivo(client):
+    caixa = _pdf_caixa_mes("Janeiro", 500, [("05/01/2021", "CR VD CART", 150)])
+    r, wb = _enviar_varios(client, [("caixa.pdf", caixa), ("itau.pdf", _pdf_itau_conta()),
+                                    ("relatorio.pdf", _pdf_relatorio())])
+    nomes = wb.sheetnames
+    assert nomes[0] == "PDFs unificados"
+    resumos = [n for n in nomes if n.startswith("Resumo ")]
+    assert len(resumos) == 2 and any("Caixa" in n for n in resumos) and any("Itaú" in n for n in resumos)
+    # as fórmulas do Resumo apontam para a aba Extrato da mesma conta
+    for n in resumos:
+        ext = "Extrato " + n[len("Resumo "):]
+        assert ext in nomes and f"'{ext}'!" in wb[n]["B4"].value

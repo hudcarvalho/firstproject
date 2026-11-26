@@ -5,7 +5,7 @@ from pathlib import Path
 from flask import Blueprint, flash, redirect, render_template, request, send_file, url_for
 
 from . import excel_txt as excel_txt_mod
-from .pdf_excel import MAX_PAGINAS, MODOS, ErroPDF, converter, converter_planilha, e_planilha
+from .pdf_excel import MAX_PAGINAS, MODOS, ErroPDF, converter, converter_planilha, converter_varios, e_planilha
 
 bp = Blueprint("ferramentas", __name__, url_prefix="/ferramentas")
 
@@ -16,10 +16,13 @@ def pdf_excel():
     O arquivo não é guardado no servidor."""
     if request.method == "GET":
         return render_template("ferramentas/pdf_excel.html", modos=MODOS, max_paginas=MAX_PAGINAS)
-    arquivo = request.files.get("arquivo")
-    if not arquivo or not arquivo.filename:
+    enviados = [a for a in request.files.getlist("arquivo") if a and a.filename]
+    if not enviados:
         flash("Escolha um arquivo PDF.", "warning")
         return redirect(url_for("ferramentas.pdf_excel"))
+    if len(enviados) > 1:
+        return _converter_varios(enviados)
+    arquivo = enviados[0]
     conteudo = arquivo.read()
     eh_planilha = e_planilha(conteudo)
     if not conteudo.startswith(b"%PDF") and not eh_planilha:
@@ -74,4 +77,27 @@ def excel_txt():
     resposta = send_file(BytesIO(txt), as_attachment=True,
                          download_name=f"{_nome_saida(arquivo.filename, 'lancamentos')}.txt", mimetype="text/plain")
     resposta.headers["X-Linhas"] = str(linhas)
+    return resposta
+
+
+def _converter_varios(enviados):
+    """Vários arquivos → uma planilha só (extratos da mesma conta unidos; demais PDFs juntos)."""
+    arquivos = []
+    for a in enviados:
+        conteudo = a.read()
+        if not conteudo.startswith(b"%PDF") and not e_planilha(conteudo):
+            flash(f"“{a.filename}” não é um PDF nem uma planilha Excel.", "danger")
+            return redirect(url_for("ferramentas.pdf_excel"))
+        arquivos.append((a.filename, conteudo))
+    modo = request.form.get("modo") if request.form.get("modo") in MODOS else "auto"
+    try:
+        planilha, n, linhas = converter_varios(
+            arquivos, modo=modo, converter_numeros=request.form.get("numeros") == "on",
+            aba_por_arquivo=request.form.get("aba_por_arquivo") == "on")
+    except ErroPDF as e:
+        flash(str(e), "danger")
+        return redirect(url_for("ferramentas.pdf_excel"))
+    resposta = send_file(BytesIO(planilha), as_attachment=True, download_name=f"unificado_{n}_arquivos.xlsx",
+                         mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    resposta.headers["X-Arquivos"], resposta.headers["X-Linhas"] = str(n), str(linhas)
     return resposta

@@ -85,7 +85,9 @@ def _br(v):
     return f"{v:,.2f}".replace(",", "X").replace(".", ",").replace("X", ".")
 
 
-def planilha(ex):
+def planilha(ex, wb=None, sufixo=""):
+    """Planilha organizada do extrato. Sozinha: devolve o .xlsx em bytes. Com wb (unificar vários
+    extratos num arquivo só): acrescenta as abas, com o sufixo no nome, e devolve o próprio wb."""
     from openpyxl import Workbook
     from openpyxl.styles import Alignment, Font, PatternFill
     from openpyxl.utils import get_column_letter
@@ -172,10 +174,19 @@ def planilha(ex):
         ws.auto_filter.ref = f"A4:{get_column_letter(len(nomes))}{ultima}"
         return ultima, total
 
-    wb = Workbook()
-    resumo = wb.active
-    resumo.title = "Resumo"
-    ext = wb.create_sheet("Extrato")
+    def nome(base):  # nome da aba com o sufixo, no limite de 31 caracteres do Excel
+        return (base[:31 - len(sufixo)] + sufixo) if sufixo else base[:31]
+
+    sozinha = wb is None
+    if sozinha:
+        wb = Workbook()
+        resumo = wb.active
+        resumo.title = nome("Resumo")
+    else:
+        resumo = wb.create_sheet(nome("Resumo"))
+    ext = wb.create_sheet(nome("Extrato"))
+    # referência à aba Extrato nas fórmulas do Resumo (entre aspas se o nome tiver espaço etc.)
+    R = ext.title if ext.title.isalnum() else "'" + ext.title.replace("'", "''") + "'"
 
     data_anterior = ex.data_saldo_anterior or (inicio - timedelta(days=1) if inicio else None)
     subtitulo = f"Extrato de {inicio:%d/%m/%Y} a {fim:%d/%m/%Y}" if inicio and fim else "Extrato"
@@ -189,10 +200,10 @@ def planilha(ex):
     cabecalho(resumo, 3, ["Item", "Calculado (R$)", "Banco (R$)", "Diferença"])
     itens = [
         (f"Saldo em {data_anterior:%d/%m/%y}" if data_anterior else "Saldo anterior",
-         f"=Extrato!{L['saldo']}5", ex.saldo_anterior),
-        ("Entradas (créditos)", f"=Extrato!{L['ent']}{total}", ex.total_entradas),
-        ("Saídas (débitos)", f"=Extrato!{L['sai']}{total}", ex.total_saidas),
-        (f"Saldo em {fim:%d/%m/%y}" if fim else "Saldo final", f"=Extrato!{L['saldo']}{ultima}", ex.saldo_final),
+         f"={R}!{L['saldo']}5", ex.saldo_anterior),
+        ("Entradas (créditos)", f"={R}!{L['ent']}{total}", ex.total_entradas),
+        ("Saídas (débitos)", f"={R}!{L['sai']}{total}", ex.total_saidas),
+        (f"Saldo em {fim:%d/%m/%y}" if fim else "Saldo final", f"={R}!{L['saldo']}{ultima}", ex.saldo_final),
     ]
     for i, (rotulo, formula, banco) in enumerate(itens, start=4):
         resumo.cell(i, 1, rotulo).font = normal
@@ -207,13 +218,13 @@ def planilha(ex):
     cabecalho(resumo, 12, ["Tipo", "Entradas (R$)", "Saídas (R$)", "Líquido (R$)", "Qtde"])
     presentes = [t for t in TIPOS if any(m.tipo == t for m in ex.movimentos)]
     presentes += sorted({m.tipo for m in ex.movimentos} - set(presentes))
-    tipo_col = f"Extrato!${L['tipo']}$6:${L['tipo']}${ultima}"
+    tipo_col = f"{R}!${L['tipo']}$6:${L['tipo']}${ultima}"
     r = 12
     for t in presentes:
         r += 1
         resumo.cell(r, 1, t).font = normal
-        fmt(resumo.cell(r, 2, f"=SUMIFS(Extrato!${L['ent']}$6:${L['ent']}${ultima},{tipo_col},$A{r})"))
-        fmt(resumo.cell(r, 3, f"=SUMIFS(Extrato!${L['sai']}$6:${L['sai']}${ultima},{tipo_col},$A{r})"))
+        fmt(resumo.cell(r, 2, f"=SUMIFS({R}!${L['ent']}$6:${L['ent']}${ultima},{tipo_col},$A{r})"))
+        fmt(resumo.cell(r, 3, f"=SUMIFS({R}!${L['sai']}$6:${L['sai']}${ultima},{tipo_col},$A{r})"))
         fmt(resumo.cell(r, 4, f"=B{r}-C{r}"))
         resumo.cell(r, 5, f"=COUNTIF({tipo_col},$A{r})").font = normal
     r += 1
@@ -231,7 +242,7 @@ def planilha(ex):
 
     # ---- Investimentos CDB (Itaú)
     if ex.cdbs:
-        inv = wb.create_sheet("Investimentos CDB")
+        inv = wb.create_sheet(nome("Investimentos CDB"))
         inv["A1"] = f"Carteira CDB e Renda Fixa — posição em {fim:%d/%m/%Y}" if fim else "Carteira CDB e Renda Fixa"
         inv["A1"].font = Font(bold=True, size=12)
         dia = f"{fim:%d/%m/%y}" if fim else ""
@@ -271,7 +282,7 @@ def planilha(ex):
 
     # ---- Saldos diários de investimento automático (Bradesco Invest Fácil)
     if ex.saldos_invest:
-        inv = wb.create_sheet(ex.titulo_invest[:31])
+        inv = wb.create_sheet(nome(ex.titulo_invest))
         inv["A1"] = "Saldos Invest Fácil / Plus" if ex.titulo_invest == "Invest Fácil" else f"Saldos {ex.titulo_invest}"
         inv["A1"].font = Font(bold=True, size=12)
         inv["A2"] = ex.descricao_invest
@@ -290,12 +301,38 @@ def planilha(ex):
 
     # ---- Lançamentos posteriores ao período
     if ex.ultimos:
-        ws = wb.create_sheet("Últimos lançamentos")
+        ws = wb.create_sheet(nome("Últimos lanç." if sufixo else "Últimos lançamentos"))
         a, b = ex.ultimos[0].data, ex.ultimos[-1].data
         aba_extrato(ws, f"Últimos lançamentos (fora do período do extrato), de {a:%d/%m/%Y} a {b:%d/%m/%Y}",
                     ex.ultimos, ex.ultimos_saldo_anterior, ex.ultimos_data_anterior)
 
     wb.calculation = CalcProperties(fullCalcOnLoad=True)
+    if not sozinha:
+        return wb
     saida = BytesIO()
     wb.save(saida)
     return saida.getvalue()
+
+
+def juntar(extratos):
+    """Vários extratos da MESMA conta (ex.: meses seguidos) num só, em ordem de data."""
+    extratos = sorted(extratos, key=lambda e: (e.inicio or (e.movimentos[0].data if e.movimentos else date.min)))
+    if len(extratos) == 1:
+        return extratos[0]
+    primeiro, ultimo = extratos[0], extratos[-1]
+    ex = Extrato(**{k: getattr(primeiro, k) for k in (
+        "banco", "empresa", "agencia", "conta", "inicio", "data_saldo_anterior", "saldo_anterior",
+        "tem_aplicacao_automatica", "nota_saldo", "origem_resumo", "rotulo_favorecido", "rotulo_saldo_banco",
+        "titulo_invest", "descricao_invest")})
+    ex.fim = ultimo.fim
+    ex.saldo_final = ultimo.saldo_final
+    entradas = [e.total_entradas for e in extratos]
+    saidas = [e.total_saidas for e in extratos]
+    ex.total_entradas = sum(entradas) if all(v is not None for v in entradas) else None
+    ex.total_saidas = sum(saidas) if all(v is not None for v in saidas) else None
+    ex.movimentos = [m for e in extratos for m in e.movimentos]
+    ex.saldos_invest = [s for e in extratos for s in e.saldos_invest]
+    ex.cdbs, ex.total_cdb = ultimo.cdbs, ultimo.total_cdb  # posição mais recente
+    ex.ultimos, ex.ultimos_saldo_anterior = ultimo.ultimos, ultimo.ultimos_saldo_anterior
+    ex.ultimos_data_anterior = ultimo.ultimos_data_anterior
+    return ex

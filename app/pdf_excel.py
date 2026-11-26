@@ -298,3 +298,170 @@ def converter_planilha(conteudo):
     if not ex.movimentos:
         raise ErroPDF("Nenhuma movimentação encontrada no extrato.")
     return planilha(ex), len(linhas) - 1, len(ex.movimentos)
+
+
+# ---------------------------------------------------------------- vários arquivos numa planilha só
+
+MAX_ARQUIVOS = 30
+
+
+def _leitores_pdf():
+    from . import (extrato_bb, extrato_bmp, extrato_bradesco, extrato_c6, extrato_caixa, extrato_itau,
+                   extrato_itau_conta, extrato_itau_periodo, extrato_nubank, extrato_safra, extrato_santander)
+    return ((extrato_itau.e_extrato_itau, extrato_itau.ler),
+            (extrato_itau_periodo.e_extrato_itau_periodo, extrato_itau_periodo.ler),
+            (extrato_itau_conta.e_extrato_itau_conta, extrato_itau_conta.ler),
+            (extrato_bradesco.e_extrato_bradesco, extrato_bradesco.ler),
+            (extrato_santander.e_extrato_santander, extrato_santander.ler),
+            (extrato_caixa.e_extrato_caixa, extrato_caixa.ler),
+            (extrato_bb.e_extrato_bb, extrato_bb.ler),
+            (extrato_c6.e_extrato_c6, extrato_c6.ler),
+            (extrato_nubank.e_extrato_nubank, extrato_nubank.ler),
+            (extrato_safra.e_extrato_safra, extrato_safra.ler),
+            (extrato_bmp.e_extrato_bmp, extrato_bmp.ler))
+
+
+def _abrir_validando(conteudo, nome):
+    try:
+        pdf = _abrir_pdf(conteudo)
+        total = len(pdf.pages)
+    except Exception as e:
+        raise ErroPDF(f"“{nome}”: não foi possível ler o arquivo. Confira se é um PDF válido e sem senha.") from e
+    if total > MAX_PAGINAS:
+        pdf.close()
+        raise ErroPDF(f"“{nome}” tem {total} páginas; o limite é {MAX_PAGINAS}.")
+    return pdf
+
+
+def _extrato_do_arquivo(nome, conteudo):
+    """Extrato reconhecido (PDF dos bancos ou planilha da Stone) ou None."""
+    if e_planilha(conteudo):
+        from . import extrato_stone
+        import warnings
+        try:
+            with warnings.catch_warnings():
+                warnings.simplefilter("ignore")
+                linhas = _linhas_planilha(conteudo)
+        except Exception as e:
+            raise ErroPDF(f"“{nome}”: não foi possível ler a planilha.") from e
+        if not extrato_stone.e_extrato_stone(linhas):
+            raise ErroPDF(f"“{nome}”: planilha não reconhecida (em Excel, só o extrato da Stone é organizado).")
+        ex = extrato_stone.ler(linhas)
+        return ex if ex.movimentos else None
+    pdf = _abrir_validando(conteudo, nome)
+    try:
+        for reconhece, ler in _leitores_pdf():
+            try:
+                if reconhece(pdf):
+                    ex = ler(pdf)
+                    return ex if ex.movimentos else None
+            except Exception:
+                continue
+        return None
+    finally:
+        pdf.close()
+
+
+def _linhas_do_pdf(nome, conteudo, modo, converter_numeros):
+    extrair = _linhas_por_tabelas if modo == "tabelas" else _linhas_por_texto
+    pdf = _abrir_validando(conteudo, nome)
+    linhas = []
+    try:
+        for page in pdf.pages:
+            for linha in _sem_colunas_vazias(extrair(page)):
+                valores = []
+                for c in linha:
+                    v = numero_br(c) if converter_numeros else None
+                    valores.append(v if v is not None else c)
+                linhas.append(valores)
+            page.flush_cache()
+    finally:
+        pdf.close()
+    return linhas
+
+
+def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arquivo=False):
+    """[(nome, bytes)] -> (planilha .xlsx única em bytes, nº de arquivos, nº de linhas/lançamentos).
+
+    Extratos da mesma conta (ex.: vários meses) viram um extrato só, com o Confere de ponta a ponta;
+    contas diferentes ficam em abas próprias. Os demais PDFs vão para uma aba única (com a coluna
+    "Arquivo") ou uma aba por arquivo."""
+    from openpyxl import Workbook
+    from openpyxl.styles import Font
+    from openpyxl.utils import get_column_letter
+
+    from .extrato_planilha import juntar, planilha
+
+    if len(arquivos) > MAX_ARQUIVOS:
+        raise ErroPDF(f"Envie no máximo {MAX_ARQUIVOS} arquivos de uma vez.")
+    contas, genericos = {}, []
+    for nome, conteudo in arquivos:
+        ex = _extrato_do_arquivo(nome, conteudo) if modo == "auto" or e_planilha(conteudo) else None
+        if ex is not None:
+            contas.setdefault((ex.banco, ex.agencia, ex.conta), []).append(ex)
+        else:
+            genericos.append((nome, _linhas_do_pdf(nome, conteudo, modo, converter_numeros)))
+
+    extratos = [juntar(lista) for lista in contas.values()]
+    if len(extratos) == 1 and not genericos:
+        return planilha(extratos[0]), len(arquivos), len(extratos[0].movimentos)
+
+    wb = Workbook()
+    padrao = wb.active
+    usados = set()
+
+    def unico(base, limite=31):
+        base = "".join(c for c in base if c not in '[]:*?/\\')[:limite].strip() or "Arquivo"
+        nome, n = base, 2
+        while nome.casefold() in usados:
+            nome = f"{base[:limite - len(str(n)) - 1]} {n}"
+            n += 1
+        usados.add(nome.casefold())
+        return nome
+
+    total = 0
+    for ex in extratos:
+        sufixo = " " + unico(f"{ex.banco} {ex.conta}".strip(), 14)
+        planilha(ex, wb=wb, sufixo=sufixo)
+        total += len(ex.movimentos)
+
+    def escrever(ws, linhas, com_arquivo=None):
+        larguras = {}
+        for linha in linhas:
+            valores = ([com_arquivo] if com_arquivo is not None else []) + linha
+            ws.append(valores)
+            r = ws.max_row
+            for i, v in enumerate(valores, start=1):
+                if isinstance(v, Decimal):
+                    ws.cell(r, i).number_format = "#,##0.00;-#,##0.00"
+                larguras[i] = max(larguras.get(i, 0), len(str(v if v is not None else "")))
+        return larguras
+
+    if genericos:
+        if aba_por_arquivo:
+            for nome, linhas in genericos:
+                ws = wb.create_sheet(unico(nome.rsplit(".", 1)[0]))
+                larg = escrever(ws, linhas) if linhas else {}
+                if not linhas:
+                    ws.cell(1, 1, "(arquivo sem texto)").font = Font(italic=True, color="888888")
+                for col, w in larg.items():
+                    ws.column_dimensions[get_column_letter(col)].width = min(max(w + 2, 8), 60)
+                total += len(linhas)
+        else:
+            ws = wb.create_sheet(unico("PDFs unificados"), 0)
+            ws.append(["Arquivo"])
+            ws.cell(1, 1).font = Font(bold=True)
+            larg = {}
+            for nome, linhas in genericos:
+                for col, w in escrever(ws, linhas, com_arquivo=nome).items():
+                    larg[col] = max(larg.get(col, 0), w)
+                total += len(linhas)
+            for col, w in larg.items():
+                ws.column_dimensions[get_column_letter(col)].width = min(max(w + 2, 8), 60)
+            ws.freeze_panes = "B2"
+    wb.remove(padrao)
+    if total == 0:
+        raise ErroPDF("Nenhum texto encontrado nos arquivos. Documentos escaneados (imagem) precisam de OCR antes.")
+    saida = BytesIO()
+    wb.save(saida)
+    return saida.getvalue(), len(arquivos), total
