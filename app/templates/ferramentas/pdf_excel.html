@@ -5,9 +5,12 @@
 <form method="post" enctype="multipart/form-data" class="card" style="max-width: 760px" id="form-pdf-excel"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="card-body">
     <div class="mb-3">
-      <label class="form-label" for="arquivo">Arquivo PDF (ou extrato da Stone em Excel)</label>
-      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf,.xls,.xlsx" required>
-      <div class="form-text">Até 10 MB e {{ max_paginas }} páginas. O arquivo é convertido na hora e não fica guardado no sistema.</div>
+      <label class="form-label" for="arquivo">Arquivo(s) PDF (ou extrato da Stone em Excel)</label>
+      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf,.xls,.xlsx" multiple required>
+      <div class="form-text">Pode escolher <strong>vários arquivos de uma vez</strong> (segure Ctrl ao clicar): sai <strong>uma planilha só</strong>.
+        Extratos da mesma conta (ex.: vários meses) viram um extrato único, em ordem de data e conferido de ponta a ponta;
+        contas diferentes ficam em abas próprias. Até {{ max_paginas }} páginas por arquivo.
+        Os arquivos são convertidos na hora e não ficam guardados no sistema.</div>
     </div>
     <div class="mb-3">
       <label class="form-label d-block">Como montar as colunas</label>
@@ -28,6 +31,10 @@
     <div class="form-check">
       <input class="form-check-input" type="checkbox" name="numeros" id="numeros" checked>
       <label class="form-check-label" for="numeros">Transformar valores (1.234,56 · -1.234,56 · (1.234,56)) em números</label>
+    </div>
+    <div class="form-check">
+      <input class="form-check-input" type="checkbox" name="aba_por_arquivo" id="aba_por_arquivo">
+      <label class="form-check-label" for="aba_por_arquivo">Vários arquivos (que não são extratos): uma aba por arquivo (senão, tudo numa aba com a coluna “Arquivo”)</label>
     </div>
     <div class="form-check">
       <input class="form-check-input" type="checkbox" name="aba_por_pagina" id="aba_por_pagina">
