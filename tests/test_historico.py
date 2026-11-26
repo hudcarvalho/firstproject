@@ -45,6 +45,10 @@ def test_so_o_dono_ve_e_ninguem_sabe_que_ele_existe(client, app):
     # e não consegue mexer no usuário do dono
     with app.app_context():
         dono_id = Usuario.query.filter_by(dono=True).one().id
+    form = outro.get(f"/usuarios/{dono_id}/editar").get_data(as_text=True)
+    assert 'name="senha"' not in form and "<fieldset disabled>" in form and ">Salvar</button>" not in form
+    # o próprio dono continua podendo trocar a senha no cadastro dele
+    assert 'name="senha"' in client.get(f"/usuarios/{dono_id}/editar").get_data(as_text=True)
     outro.post(f"/usuarios/{dono_id}/editar", data={"nome": "Admin", "email": "admin@escritorio.com",
                                                    "ativo": "on", "senha": "outrasenha123",
                                                    "confirmacao": "outrasenha123"})

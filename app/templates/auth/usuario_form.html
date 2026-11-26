@@ -2,14 +2,18 @@
 {% block title %}Usuário{% endblock %}
 {% block content %}
 {% set f = request.form %}
+{% set bloqueado = usuario.dono and usuario.id != current_user.id %}
 <h1 class="h3 mb-3">{{ 'Editar usuário' if usuario.id else 'Novo usuário' }}</h1>
 <form method="post" class="card card-body" style="max-width: 720px"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+  <fieldset {{ 'disabled' if bloqueado }}>
   <div class="row g-3">
     <div class="col-md-6"><label class="form-label">Nome *</label><input class="form-control" name="nome" value="{{ f.get('nome', usuario.nome or '') }}" required></div>
     <div class="col-md-6"><label class="form-label">E-mail (login) *</label><input type="email" class="form-control" name="email" value="{{ f.get('email', usuario.email or '') }}" required></div>
+    {% if not bloqueado %}
     <div class="col-md-6"><label class="form-label">{{ 'Nova senha' if usuario.id else 'Senha *' }}</label><input type="password" class="form-control" name="senha" minlength="8" {{ '' if usuario.id else 'required' }} autocomplete="new-password">
       {% if usuario.id %}<div class="form-text">Deixe em branco para manter a senha atual.</div>{% else %}<div class="form-text">Mínimo de 8 caracteres.</div>{% endif %}</div>
     <div class="col-md-6"><label class="form-label">Confirme a senha</label><input type="password" class="form-control" name="confirmacao" autocomplete="new-password"></div>
+    {% endif %}
     <div class="col-md-6"><label class="form-label">Responsável vinculado</label>
       <select class="form-select" name="responsavel_id">
         <option value="">— nenhum —</option>
@@ -22,6 +26,11 @@
       <div class="form-check"><input class="form-check-input" type="checkbox" name="ativo" id="ativo" {{ 'checked' if usuario.ativo }}><label class="form-check-label" for="ativo">Ativo (pode entrar no sistema)</label></div>
     </div>
   </div>
-  <div class="d-flex gap-2 mt-3"><button class="btn btn-primary">Salvar</button><a class="btn btn-outline-secondary" href="{{ url_for('auth.usuarios_lista') }}">Cancelar</a></div>
+  </fieldset>
+  <div class="d-flex align-items-center gap-2 mt-3">
+    {% if bloqueado %}<span class="small text-muted">Este usuário só pode ser alterado por ele mesmo.</span>
+    <a class="btn btn-outline-secondary ms-auto" href="{{ url_for('auth.usuarios_lista') }}">Voltar</a>
+    {% else %}<button class="btn btn-primary">Salvar</button><a class="btn btn-outline-secondary" href="{{ url_for('auth.usuarios_lista') }}">Cancelar</a>{% endif %}
+  </div>
 </form>
 {% endblock %}
