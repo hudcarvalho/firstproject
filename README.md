@@ -68,10 +68,6 @@ os demais ficam ocultos até serem ativados em *Cadastros → Módulos*.
   No Excel, o cálculo vem em **fórmulas** (com a explicação de cada uma ao lado): dados informados em
   amarelo, adições/exclusões somadas da aba própria, alíquotas e limites na aba "Parâmetros" e saldos
   da Parte B encadeados entre as colunas.
-  O botão **Guia (DARF)** do período calcula o pagamento em **quota única** ou **parcelado** (até 3
-  quotas de no mínimo R$ 1.000,00; 2ª com juros de 1%, 3ª com Selic + 1%), com vencimentos e códigos
-  de receita (editáveis), e gera um PDF com os dados de cada campo do DARF. O DARF com código de barras
-  é numerado pela Receita Federal: emita-o no Sicalc Web ou na DCTFWeb com esses dados.
 - **Lucro por grupo econômico** (*Contábil → Lucro por grupo econômico*, ou o atalho na lista de
   clientes ao filtrar um grupo): para o grupo e o ano escolhidos, lista as empresas ativas do Lucro Real
   (inclusive Lucro Real Trimestral) com o lucro
