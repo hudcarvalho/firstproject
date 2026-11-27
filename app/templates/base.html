@@ -65,6 +65,7 @@
         {% endif %}
       </ul>
       <ul class="navbar-nav ms-auto">
+        <li class="nav-item"><a class="nav-link {{ 'active' if ep.startswith('alertas.') }}" href="{{ url_for('alertas.lista') }}" title="Meus alertas">🔔 Alertas{% if meus_alertas_hoje %} <span class="badge text-bg-warning">{{ meus_alertas_hoje|length }}</span>{% endif %}</a></li>
         <li class="nav-item dropdown">
           <a class="nav-link dropdown-toggle" href="#" data-bs-toggle="dropdown">{{ current_user.nome }}</a>
           <ul class="dropdown-menu dropdown-menu-end">
@@ -83,6 +84,18 @@
   {% if current_user.is_authenticated and ep_atual not in ('main.empresas_lista', 'auth.login', 'auth.primeiro_acesso') %}
   {# volta à lista de clientes com os mesmos filtros, ordem e posição (script abaixo) #}
   <a class="btn btn-sm btn-outline-secondary mt-3 mb-2 voltar-clientes" href="{{ url_for('main.empresas_lista') }}">&larr; Voltar aos clientes</a>
+  {% endif %}
+  {% if meus_alertas_hoje and ep_atual != 'alertas.lista' %}
+  <div class="alert alert-info py-2 mt-2" id="meus-alertas">
+    <div class="d-flex flex-wrap align-items-center gap-2">
+      🔔 <strong>Seus alertas ({{ meus_alertas_hoje|length }}):</strong>
+      <a class="btn btn-sm btn-info ms-auto" href="{{ url_for('alertas.lista') }}">Ver e concluir</a>
+    </div>
+    <ul class="mb-0 mt-1 small">
+      {% for a in meus_alertas_hoje[:5] %}<li>{{ a.data | data_br }} — {{ a.texto }}{% if a.empresa %} <span class="text-muted">({{ a.empresa.razao_social }})</span>{% endif %}</li>{% endfor %}
+      {% if meus_alertas_hoje|length > 5 %}<li>… e mais {{ meus_alertas_hoje|length - 5 }}</li>{% endif %}
+    </ul>
+  </div>
   {% endif %}
   {% if lembrete_quotas %}
   <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 py-2 mt-2" id="lembrete-quotas">
