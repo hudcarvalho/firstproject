@@ -148,3 +148,82 @@ def palavras_da_imagem(conteudo):
         raise ErroOCR("Não foi possível abrir a imagem. Confira se é um JPG ou PNG válido.") from e
     imagem = _preparar(imagem)
     return palavras(imagem, imagem.width / LARGURA_A4), LARGURA_A4
+
+
+# ---------------------------------------------------------------- fotos de documentos (extratos)
+
+def _angulo(imagem):
+    """Inclinação da foto (graus), pelo ângulo em que as linhas de texto ficam mais "nítidas"."""
+    from PIL import Image
+    p = imagem.copy()
+    p.thumbnail((900, 900))
+    p = p.point(lambda v: 255 if v < 140 else 0)
+    melhor = (0.0, 0.0)
+    for i in range(-24, 25):
+        a = i * 0.25
+        r = p.rotate(a, resample=Image.BILINEAR, fillcolor=0)
+        col = r.resize((1, r.height), Image.BOX).tobytes()
+        nota = sum((col[k + 1] - col[k]) ** 2 for k in range(len(col) - 1))
+        if nota > melhor[0]:
+            melhor = (nota, a)
+    return melhor[1]
+
+
+def preparar_foto(imagem, alvo=2400, fino=False, angulo=None):
+    """Foto ou página escaneada pronta para o OCR: em pé, tons de cinza, tamanho padrão, fundo
+    clareado (faixas cinzas e sombras viram branco) e endireitada. `fino`: fundo estimado com mais
+    detalhe (melhor para as colunas de números; o normal é melhor para o texto). Devolve
+    (imagem, ângulo usado)."""
+    from PIL import Image, ImageFilter, ImageMath, ImageOps
+    imagem = ImageOps.exif_transpose(imagem).convert("L")
+    f = alvo / max(imagem.size)
+    imagem = imagem.resize((round(imagem.width * f), round(imagem.height * f)), Image.LANCZOS)
+    # fundo estimado numa cópia menor (bem mais rápido) e ampliado de volta
+    reducao, desfoque = (2, 1) if fino else (4, 5)
+    pequena = imagem.resize((imagem.width // reducao, imagem.height // reducao), Image.BILINEAR)
+    fundo = pequena.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(desfoque)).resize(
+        imagem.size, Image.BILINEAR)
+    avaliar = getattr(ImageMath, "unsafe_eval", None) or ImageMath.eval
+    imagem = avaliar("convert(min(a*255/(b+1), 255), 'L')", a=imagem, b=fundo)
+    imagem = ImageOps.autocontrast(imagem, cutoff=1)
+    a = _angulo(imagem) if angulo is None else angulo
+    if a:
+        imagem = imagem.rotate(a, resample=Image.BICUBIC, fillcolor=255)
+    return imagem, a
+
+
+def tsv(imagem, psm=11, numeros=False):
+    """Palavras com posição em pixels: [{text, x0, x1, top, bottom, conf}]. `numeros`: só lê
+    algarismos, ponto, vírgula e sinal (colunas de valores), o que evita trocar 8 por B etc."""
+    if not disponivel():
+        raise ErroOCR("O reconhecimento de texto (Tesseract) não está instalado no servidor.")
+    with tempfile.TemporaryDirectory() as pasta:
+        caminho = os.path.join(pasta, "img.png")
+        imagem.save(caminho)
+        comando = ["tesseract", caminho, "stdout", "--psm", str(psm)]
+        if numeros:
+            comando += ["-c", "tessedit_char_whitelist=0123456789.,-"]
+        elif idioma():
+            comando += ["-l", idioma()]
+        comando += ["tsv"]
+        try:
+            r = subprocess.run(comando, capture_output=True, timeout=TEMPO_LIMITE,
+                               env={**os.environ, "OMP_THREAD_LIMIT": "1"})
+        except subprocess.TimeoutExpired as e:
+            raise ErroOCR("A leitura da imagem demorou demais.") from e
+    if r.returncode != 0:
+        raise ErroOCR("Não foi possível ler a imagem: " + r.stderr.decode("utf-8", "replace").strip()[:200])
+    saida = []
+    for linha in csv.DictReader(r.stdout.decode("utf-8", "replace").splitlines(), delimiter="\t",
+                                quoting=csv.QUOTE_NONE):
+        texto = (linha.get("text") or "").strip()
+        if linha.get("level") != "5" or not texto:
+            continue
+        try:
+            x, y, w, h = (int(linha[k]) for k in ("left", "top", "width", "height"))
+            conf = float(linha["conf"])
+        except (TypeError, ValueError, KeyError):
+            continue
+        saida.append({"text": texto, "x0": x, "x1": x + w, "top": y, "bottom": y + h, "conf": conf,
+                      "linha": tuple(linha.get(k) for k in ("block_num", "par_num", "line_num"))})
+    return saida
