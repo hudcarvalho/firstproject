@@ -1,7 +1,7 @@
 """Conversão de PDF em planilha Excel.
 
-Lê o texto do PDF com o pdfplumber (só PDFs com texto; PDF escaneado, que é imagem, precisaria
-de OCR) e monta as colunas de duas formas:
+Lê o texto do PDF com o pdfplumber; páginas escaneadas (sem texto) e fotos/imagens passam pelo
+OCR gratuito do servidor (app.ocr, Tesseract). Monta as colunas de duas formas:
 - "layout": usa o alinhamento do texto na página inteira para formar linhas e colunas (bom para
   relatórios contábeis sem bordas: balancetes, razões, DRE);
 - "tabelas": só as tabelas desenhadas com linhas/bordas.
@@ -45,12 +45,15 @@ def _limpar(celula):
 
 
 def _segmentos_por_linha(page):
+    return _segmentos(page.extract_words(x_tolerance=1.5, y_tolerance=2.5, keep_blank_chars=False,
+                                         use_text_flow=False, extra_attrs=["size"]))
+
+
+def _segmentos(palavras):
     """Palavras da página agrupadas em linhas; em cada linha, palavras próximas formam um trecho.
 
     Devolve [[(x0, x1, texto), ...], ...] de cima para baixo.
     """
-    palavras = page.extract_words(x_tolerance=1.5, y_tolerance=2.5, keep_blank_chars=False,
-                                  use_text_flow=False, extra_attrs=["size"])
     linhas = []
     for w in sorted(palavras, key=lambda w: (round(w["top"]), w["x0"])):
         meio = (w["top"] + w["bottom"]) / 2
@@ -107,8 +110,16 @@ def _faixas_de_colunas(linhas, largura_pagina):
 
 def _linhas_por_texto(page):
     """Todo o texto da página em linhas e colunas pelo alinhamento das palavras."""
-    linhas = _segmentos_por_linha(page)
-    faixas = _faixas_de_colunas(linhas, page.width)
+    return _linhas_de_segmentos(_segmentos_por_linha(page), page.width)
+
+
+def _linhas_de_palavras(palavras, largura):
+    """Palavras lidas por OCR (já em pontos) -> linhas e colunas, como num PDF com texto."""
+    return _linhas_de_segmentos(_segmentos(palavras), largura)
+
+
+def _linhas_de_segmentos(linhas, largura):
+    faixas = _faixas_de_colunas(linhas, largura)
     if len(faixas) < 2:
         return [[" ".join(t for _, _, t in l)] for l in linhas]
 
@@ -137,6 +148,40 @@ def _linhas_por_tabelas(page):
             linhas.append([])  # linha em branco entre tabelas da mesma página
         linhas.extend(tabela)
     return linhas
+
+
+def _precisa_ocr(page):
+    """Página escaneada: quase nenhum caractere de texto, mas tem imagem."""
+    return len(page.chars) < 15 and bool(page.images)
+
+
+class _ContadorOCR:
+    """Conta as páginas lidas por OCR numa conversão e aplica o limite."""
+
+    def __init__(self):
+        self.paginas = 0
+
+    def linhas(self, conteudo_pdf, indice, nome=""):
+        from . import ocr
+        if not ocr.disponivel():
+            raise ErroPDF((f"“{nome}”: " if nome else "") + "o arquivo é escaneado (imagem) e o reconhecimento de "
+                          "texto (OCR) não está disponível no servidor.")
+        self.paginas += 1
+        if self.paginas > ocr.MAX_PAGINAS_OCR:
+            raise ErroPDF(f"Há mais de {ocr.MAX_PAGINAS_OCR} páginas escaneadas (imagem) para ler por OCR, que é "
+                          "lento. Divida os arquivos e converta por partes.")
+        try:
+            if indice is None:
+                palavras, largura = ocr.palavras_da_imagem(conteudo_pdf)
+            else:
+                palavras, largura = ocr.palavras_da_pagina_pdf(conteudo_pdf, indice)
+        except ocr.ErroOCR as e:
+            raise ErroPDF((f"“{nome}”: " if nome else "") + str(e)) from e
+        return _linhas_de_palavras(palavras, largura)
+
+
+AVISO_OCR = ("Atenção: parte deste arquivo era imagem (escaneado/foto) e foi lida por reconhecimento de texto "
+             "(OCR). Confira os valores com o documento original.")
 
 
 def _sem_colunas_vazias(linhas):
@@ -170,12 +215,12 @@ def _abrir_pdf(conteudo):
         return pdfplumber.open(BytesIO(buf.getvalue()))
 
 
-def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=True):
+def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=True, info=None):
     """PDF (bytes) -> (planilha .xlsx em bytes, nº de páginas, nº de linhas).
 
     No modo "auto", extrato mensal do Itaú vira a planilha organizada de app.extrato_itau
-    (resumo conferido com o banco, extrato classificado e investimentos)."""
-    import pdfplumber
+    (resumo conferido com o banco, extrato classificado e investimentos).
+    Páginas escaneadas são lidas por OCR; `info["ocr"]` recebe quantas foram."""
     from openpyxl import Workbook
     from openpyxl.styles import Font
 
@@ -226,11 +271,15 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
     ws.title = "Página 1" if aba_por_pagina else "PDF"
     total_linhas = 0
     larguras = {}
+    contador = _ContadorOCR()
     try:
         for n, page in enumerate(paginas, start=1):
             if aba_por_pagina and n > 1:
                 ws = wb.create_sheet(f"Página {n}")
-            linhas = _sem_colunas_vazias(extrair(page))
+            if _precisa_ocr(page):
+                linhas = _sem_colunas_vazias(contador.linhas(conteudo, n - 1))
+            else:
+                linhas = _sem_colunas_vazias(extrair(page))
             if not aba_por_pagina and linhas and ws.max_row > 1:
                 ws.append([])
             for linha in linhas:
@@ -248,9 +297,12 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
             page.flush_cache()
     finally:
         pdf.close()
+    if info is not None:
+        info["ocr"] = contador.paginas
     if total_linhas == 0:
-        raise ErroPDF("Nenhum texto encontrado no PDF. Se for um documento escaneado (imagem), "
-                      "ele precisa passar por OCR antes; se escolheu “Somente tabelas”, tente “Layout da página”.")
+        raise ErroPDF("Nenhum texto encontrado no PDF. Se escolheu “Somente tabelas”, tente “Layout da página”.")
+    if contador.paginas:
+        _marcar_ocr(wb.worksheets[0])
     from openpyxl.utils import get_column_letter
     for (aba, col), w in larguras.items():
         wb[aba].column_dimensions[get_column_letter(col)].width = min(max(w + 2, 8), 60)
@@ -261,6 +313,44 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
     saida = BytesIO()
     wb.save(saida)
     return saida.getvalue(), total, total_linhas
+
+
+def _marcar_ocr(ws):
+    from openpyxl.styles import Font, PatternFill
+    ws.insert_rows(1)
+    ws.cell(1, 1, AVISO_OCR).font = Font(bold=True, color="9C5700")
+    ws.cell(1, 1).fill = PatternFill("solid", fgColor="FFEB9C")
+
+
+def converter_imagem(conteudo, converter_numeros=True, info=None):
+    """Foto/imagem (JPG, PNG…) -> (planilha .xlsx em bytes, 1, nº de linhas), lida por OCR."""
+    from openpyxl import Workbook
+    from openpyxl.utils import get_column_letter
+    linhas = _sem_colunas_vazias(_ContadorOCR().linhas(conteudo, None))
+    if info is not None:
+        info["ocr"] = 1
+    if not linhas:
+        raise ErroPDF("Nenhum texto encontrado na imagem. Tente uma foto mais nítida, de frente e bem iluminada.")
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Imagem"
+    larguras = {}
+    for linha in linhas:
+        valores = []
+        for c in linha:
+            v = numero_br(c) if converter_numeros else None
+            valores.append(v if v is not None else c)
+        ws.append(valores)
+        for i, v in enumerate(valores, start=1):
+            if isinstance(v, Decimal):
+                ws.cell(ws.max_row, i).number_format = "#,##0.00;-#,##0.00"
+            larguras[i] = max(larguras.get(i, 0), len(str(v)))
+    for col, w in larguras.items():
+        ws.column_dimensions[get_column_letter(col)].width = min(max(w + 2, 8), 60)
+    _marcar_ocr(ws)
+    saida = BytesIO()
+    wb.save(saida)
+    return saida.getvalue(), 1, len(linhas)
 
 
 # ---------------------------------------------------------------- extratos em planilha (Stone)
@@ -362,25 +452,36 @@ def _extrato_do_arquivo(nome, conteudo):
         pdf.close()
 
 
-def _linhas_do_pdf(nome, conteudo, modo, converter_numeros):
+def _linhas_do_pdf(nome, conteudo, modo, converter_numeros, contador):
+    from .ocr import e_imagem
+    if e_imagem(conteudo):
+        brutas = [contador.linhas(conteudo, None, nome)]
+        return _numeros(brutas, converter_numeros)
     extrair = _linhas_por_tabelas if modo == "tabelas" else _linhas_por_texto
     pdf = _abrir_validando(conteudo, nome)
-    linhas = []
+    brutas = []
     try:
-        for page in pdf.pages:
-            for linha in _sem_colunas_vazias(extrair(page)):
-                valores = []
-                for c in linha:
-                    v = numero_br(c) if converter_numeros else None
-                    valores.append(v if v is not None else c)
-                linhas.append(valores)
+        for i, page in enumerate(pdf.pages):
+            brutas.append(contador.linhas(conteudo, i, nome) if _precisa_ocr(page) else extrair(page))
             page.flush_cache()
     finally:
         pdf.close()
+    return _numeros(brutas, converter_numeros)
+
+
+def _numeros(paginas, converter_numeros):
+    linhas = []
+    for pagina in paginas:
+        for linha in _sem_colunas_vazias(pagina):
+            valores = []
+            for c in linha:
+                v = numero_br(c) if converter_numeros else None
+                valores.append(v if v is not None else c)
+            linhas.append(valores)
     return linhas
 
 
-def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arquivo=False):
+def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arquivo=False, info=None):
     """[(nome, bytes)] -> (planilha .xlsx única em bytes, nº de arquivos, nº de linhas/lançamentos).
 
     Extratos da mesma conta (ex.: vários meses) viram um extrato só, com o Confere de ponta a ponta;
@@ -394,13 +495,20 @@ def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arqu
 
     if len(arquivos) > MAX_ARQUIVOS:
         raise ErroPDF(f"Envie no máximo {MAX_ARQUIVOS} arquivos de uma vez.")
+    from .ocr import e_imagem
     contas, genericos = {}, []
+    contador = _ContadorOCR()
     for nome, conteudo in arquivos:
-        ex = _extrato_do_arquivo(nome, conteudo) if modo == "auto" or e_planilha(conteudo) else None
+        ex = (_extrato_do_arquivo(nome, conteudo)
+              if (modo == "auto" and not e_imagem(conteudo)) or e_planilha(conteudo) else None)
         if ex is not None:
             contas.setdefault((ex.banco, ex.agencia, ex.conta), []).append(ex)
         else:
-            genericos.append((nome, _linhas_do_pdf(nome, conteudo, modo, converter_numeros)))
+            antes = contador.paginas
+            linhas = _linhas_do_pdf(nome, conteudo, modo, converter_numeros, contador)
+            genericos.append((nome + (" (lido por OCR)" if contador.paginas > antes else ""), linhas))
+    if info is not None:
+        info["ocr"] = contador.paginas
 
     extratos = [juntar(lista) for lista in contas.values()]
     if len(extratos) == 1 and not genericos:
@@ -440,10 +548,12 @@ def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arqu
     if genericos:
         if aba_por_arquivo:
             for nome, linhas in genericos:
-                ws = wb.create_sheet(unico(nome.rsplit(".", 1)[0]))
+                ws = wb.create_sheet(unico(nome.replace(" (lido por OCR)", "").rsplit(".", 1)[0]))
                 larg = escrever(ws, linhas) if linhas else {}
                 if not linhas:
                     ws.cell(1, 1, "(arquivo sem texto)").font = Font(italic=True, color="888888")
+                elif nome.endswith(" (lido por OCR)"):
+                    _marcar_ocr(ws)
                 for col, w in larg.items():
                     ws.column_dimensions[get_column_letter(col)].width = min(max(w + 2, 8), 60)
                 total += len(linhas)
@@ -459,9 +569,12 @@ def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arqu
             for col, w in larg.items():
                 ws.column_dimensions[get_column_letter(col)].width = min(max(w + 2, 8), 60)
             ws.freeze_panes = "B2"
+            if contador.paginas:
+                _marcar_ocr(ws)
+                ws.freeze_panes = "B3"
     wb.remove(padrao)
     if total == 0:
-        raise ErroPDF("Nenhum texto encontrado nos arquivos. Documentos escaneados (imagem) precisam de OCR antes.")
+        raise ErroPDF("Nenhum texto encontrado nos arquivos.")
     saida = BytesIO()
     wb.save(saida)
     return saida.getvalue(), len(arquivos), total
