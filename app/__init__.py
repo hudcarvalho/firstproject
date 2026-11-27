@@ -36,7 +36,20 @@ def _database_url(instance_path):
     return url
 
 
+FUSO = "America/Sao_Paulo"
+
+
+def _usar_horario_de_brasilia():
+    """O servidor (PythonAnywhere) roda em UTC; o sistema todo usa o horário de Brasília
+    (datas de hoje, lembrete do dia 10, histórico de alterações, nomes de arquivos)."""
+    import time
+    if os.environ.get("TZ") != FUSO and hasattr(time, "tzset"):
+        os.environ["TZ"] = FUSO
+        time.tzset()
+
+
 def create_app(config=None):
+    _usar_horario_de_brasilia()
     app = Flask(__name__, instance_relative_config=True)
     os.makedirs(app.instance_path, exist_ok=True)
     cookie_seguro = os.environ.get("COOKIE_SECURE") == "1"
