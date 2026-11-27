@@ -1,7 +1,8 @@
 /* Filtro de seleção múltipla, como o filtro do Excel.
  *
  * Transforma um <select> cuja primeira opção tem value="" (ex.: "Todas") numa caixa com uma lista de
- * opções para marcar/desmarcar, "(Selecionar tudo)" e busca (listas grandes). O <select> fica oculto
+ * opções para marcar/desmarcar, "(Selecionar tudo)" e busca (listas grandes: o que for digitado já filtra,
+ * como no Excel). O <select> fica oculto
  * e continua recebendo o evento "change".
  *
  *   FiltroMulti.criar(select)          cria o filtro
@@ -33,9 +34,11 @@
     est.botao.title = est.botao.textContent;
     est.botao.classList.toggle('filtro-ativo', !!est.marcados);
     est.caixas.forEach(cx => { cx.checked = !est.marcados || est.marcados.has(cx.value); });
-    const marcadas = est.caixas.filter(cx => cx.checked).length;
-    est.todos.checked = marcadas === est.caixas.length;
-    est.todos.indeterminate = marcadas > 0 && marcadas < est.caixas.length;
+    // com pesquisa, "(Selecionar tudo)" se refere só aos itens que estão aparecendo
+    const visiveis = est.caixas.filter(cx => !cx.closest('label').classList.contains('d-none'));
+    const marcadas = visiveis.filter(cx => cx.checked).length;
+    est.todos.checked = marcadas === visiveis.length;
+    est.todos.indeterminate = marcadas > 0 && marcadas < visiveis.length;
   }
 
   function avisar(select) {
@@ -116,14 +119,46 @@
       avisar(select);
     }));
     if (busca) {
+      // Como no Excel: ao digitar, a lista mostra só o que combina e o filtro passa a ser só esses
+      // itens, na hora; apagar a pesquisa volta à marcação de antes. Enter confirma e fecha.
+      const normal = t => t.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
       busca.addEventListener('input', () => {
-        const t = busca.value.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
+        const t = normal(busca.value.trim());
+        if (t && est.antesBusca === undefined) est.antesBusca = est.marcados ? new Set(est.marcados) : null;
+        const visiveis = [];
         caixas.forEach(cx => {
-          const r = cx.nextSibling.textContent.normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase();
-          cx.closest('label').classList.toggle('d-none', !!t && !r.includes(t));
+          const combina = !t || normal(cx.nextSibling.textContent).includes(t);
+          cx.closest('label').classList.toggle('d-none', !combina);
+          if (combina) visiveis.push(cx.value);
         });
+        if (t) {
+          if (!visiveis.length) return;  // nada combina: mantém o filtro atual
+          est.marcados = new Set(visiveis);
+        } else if (est.antesBusca !== undefined) {
+          est.marcados = est.antesBusca;
+          delete est.antesBusca;
+        }
+        atualizar(select);
+        avisar(select);
+      });
+      busca.addEventListener('keydown', ev => {
+        if (ev.key === 'Enter') {
+          ev.preventDefault();
+          const dd = window.bootstrap && bootstrap.Dropdown.getInstance(botao);
+          if (dd) dd.hide();
+        } else if (ev.key === 'Escape' && busca.value) {
+          ev.stopPropagation();
+          busca.value = '';
+          busca.dispatchEvent(new Event('input'));
+        }
       });
       caixa.addEventListener('shown.bs.dropdown', () => busca.focus());
+      // ao fechar, a pesquisa é limpa (a seleção feita continua valendo)
+      caixa.addEventListener('hidden.bs.dropdown', () => {
+        busca.value = '';
+        delete est.antesBusca;
+        caixas.forEach(cx => cx.closest('label').classList.remove('d-none'));
+      });
     }
     // valor já escolhido no <select> (ex.: vindo do endereço) vira a marcação inicial
     if (select.value !== '') est.marcados = new Set([select.value]);
