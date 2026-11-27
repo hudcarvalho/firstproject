@@ -35,10 +35,11 @@
   <thead>
     <tr class="titulos">
       <th style="width: 90px" class="ordenavel" data-ordem="codigo" title="Clique para ordenar por código (menor/maior)">Código <span class="seta"></span></th>
-      <th class="ordenavel" data-ordem="nome" title="Clique para ordenar por razão social (A–Z / Z–A)">Razão social <span class="seta"></span></th><th style="width: 170px">CNPJ</th>
-      <th style="width: 170px">Grupo econômico</th>
-      <th style="width: 180px">Tributação</th>
-      {% for m in modulos %}<th style="width: 160px">Resp. {{ m.nome }}</th>{% endfor %}
+      <th class="ordenavel" data-ordem="nome" title="Clique para ordenar por razão social (A–Z / Z–A)">Razão social <span class="seta"></span></th>
+      <th style="width: 170px" class="ordenavel" data-ordem="cnpj" title="Clique para ordenar por CNPJ">CNPJ <span class="seta"></span></th>
+      <th style="width: 170px" class="ordenavel" data-ordem="txtgrupo" title="Clique para ordenar por grupo econômico (A–Z / Z–A)">Grupo econômico <span class="seta"></span></th>
+      <th style="width: 180px" class="ordenavel" data-ordem="txtregime" title="Clique para ordenar por tributação (A–Z / Z–A)">Tributação <span class="seta"></span></th>
+      {% for m in modulos %}<th style="width: 160px" class="ordenavel" data-ordem="txtresp{{ m.codigo }}" title="Clique para ordenar por responsável (A–Z / Z–A)">Resp. {{ m.nome }} <span class="seta"></span></th>{% endfor %}
       {% for m in modulos %}<th style="width: 150px" class="ordenavel" data-ordem="conc{{ m.codigo }}" title="Clique para ordenar por competência (mais antiga/mais recente)">{{ m.rotulo_controle }} <span class="seta"></span></th>{% endfor %}
       <th style="width: 70px"></th>
     </tr>
@@ -87,7 +88,8 @@
   {% for e in empresas %}
     <tr data-id="{{ e.id }}" class="linha-cliente{{ ' com-observacao' if e.observacoes }}"{% if e.observacoes %} title="Observação: {{ e.observacoes }}"{% endif %} data-codigo="{{ e.codigo or '' }}" data-nome="{{ e.razao_social }} {{ e.nome_fantasia or '' }}" data-razao="{{ e.razao_social }}" data-cnpj="{{ e.cnpj }}"
         data-dist="{{ 1 if distribuido.get(e.id) else 0 }}" data-grupo="{{ e.grupo_id or 0 }}" data-regime="{{ e.regime_id or 0 }}" data-situacao="{{ 'ativa' if e.ativo else 'inativa' }}" data-obs="{{ 1 if e.observacoes else 0 }}"
-        {% for m in modulos %}{% set c = e.controle(m) %}data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" data-sit{{ m.codigo }}="{{ {'sem_movimento': 'sm', 'ex_cliente': 'ex', 'encerrada': 'enc'}.get(c.situacao or '', '') if c else '' }}" {% endfor %}>
+        data-txtgrupo="{{ e.grupo.nome if e.grupo else '' }}" data-txtregime="{{ e.regime.nome if e.regime else '' }}"
+        {% for m in modulos %}{% set c = e.controle(m) %}data-txtresp{{ m.codigo }}="{{ c.responsavel.nome if c and c.responsavel else '' }}" data-resp{{ m.codigo }}="{{ c.responsavel_id if c and c.responsavel_id else 0 }}" data-conc{{ m.codigo }}="{{ c.concluido_ate | input_competencia if c and c.concluido_ate else 0 }}" data-sit{{ m.codigo }}="{{ {'sem_movimento': 'sm', 'ex_cliente': 'ex', 'encerrada': 'enc'}.get(c.situacao or '', '') if c else '' }}" {% endfor %}>
       <td class="text-muted">{{ e.codigo or '' }}</td>
       <td>{% set total_dist = distribuido.get(e.id) %}<a class="icone-dist {{ 'ok' if total_dist else 'pendente' }}" href="{{ url_for('distribuicao.empresa', id=e.id) }}"
           title="{{ ('Distribuição de lucros ' ~ ano ~ ': R$ ' ~ (total_dist | valor)) if total_dist else ('Sem distribuição de lucros lançada em ' ~ ano) }} — abrir">$</a>
@@ -234,6 +236,13 @@
   };
   // quem não tem o valor fica sempre no fim (0 = tem valor; quanto maior, mais para o fim)
   const semValor = { codigo: l => (l.dados.codigo ? 0 : 1) };
+  comparadores.cnpj = (a, b) => comparaTexto(a.dados.cnpj.replace(/\D/g, ''), b.dados.cnpj.replace(/\D/g, ''));
+  // grupo, tributação e responsável: ordem alfabética; empate segue a razão social; em branco no fim
+  titulos.filter(th => th.dataset.ordem.startsWith('txt')).forEach(th => {
+    const campo = th.dataset.ordem;
+    comparadores[campo] = (a, b) => comparaTexto(a.dados[campo], b.dados[campo]) || comparaTexto(a.dados.razao, b.dados.razao);
+    semValor[campo] = l => (l.dados[campo] ? 0 : 1);
+  });
   // "Escriturada até" de cada módulo: competência AAAA-MM; empate segue a razão social
   titulos.filter(th => th.dataset.ordem.startsWith('conc')).forEach(th => {
     const campo = th.dataset.ordem;
