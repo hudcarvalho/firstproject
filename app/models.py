@@ -1,4 +1,4 @@
-from datetime import date
+from datetime import date, datetime
 
 from flask_login import UserMixin
 from flask_sqlalchemy import SQLAlchemy
@@ -496,8 +496,18 @@ class Alerta(db.Model):
     usuario_id = db.Column(db.Integer, db.ForeignKey("usuario.id"), nullable=False, index=True)
     texto = db.Column(db.String(500), nullable=False)
     data = db.Column(db.Date, nullable=False)
+    hora = db.Column(db.Time)  # opcional: o alerta aparece a partir deste horário
     empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"))
     criado_em = db.Column(db.DateTime, nullable=False)
     concluido_em = db.Column(db.DateTime)
 
     empresa = db.relationship("Empresa")
+
+    @property
+    def momento(self):
+        """Data e horário em que o alerta passa a aparecer (sem horário: início do dia)."""
+        return datetime.combine(self.data, self.hora or datetime.min.time())
+
+    @property
+    def quando_rotulo(self):
+        return self.data.strftime("%d/%m/%Y") + (self.hora.strftime(" %H:%M") if self.hora else "")

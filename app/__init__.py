@@ -106,9 +106,16 @@ def create_app(config=None):
 
         if not current_user.is_authenticated:
             return {}
-        from .alertas import pendentes_hoje
+        from datetime import datetime
+
+        from .alertas import ainda_hoje, pendentes_hoje
         try:
-            return {"meus_alertas_hoje": pendentes_hoje()}
+            agora = datetime.now()
+            # alertas de hoje com horário mais tarde: a página avisa sozinha quando chegar a hora
+            mais_tarde = [{"ms": int((a.momento - agora).total_seconds() * 1000), "hora": a.hora.strftime("%H:%M"),
+                           "texto": a.texto, "empresa": a.empresa.razao_social if a.empresa else ""}
+                          for a in ainda_hoje()]
+            return {"meus_alertas_hoje": pendentes_hoje(), "meus_alertas_mais_tarde": mais_tarde}
         except Exception:  # o alerta nunca derruba a página
             app.logger.exception("Falha ao ler os alertas do usuário")
             return {}

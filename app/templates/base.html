@@ -92,7 +92,7 @@
       <a class="btn btn-sm btn-info ms-auto" href="{{ url_for('alertas.lista') }}">Ver e concluir</a>
     </div>
     <ul class="mb-0 mt-1 small">
-      {% for a in meus_alertas_hoje[:5] %}<li>{{ a.data | data_br }} — {{ a.texto }}{% if a.empresa %} <span class="text-muted">({{ a.empresa.razao_social }})</span>{% endif %}</li>{% endfor %}
+      {% for a in meus_alertas_hoje[:5] %}<li>{{ a.quando_rotulo }} — {{ a.texto }}{% if a.empresa %} <span class="text-muted">({{ a.empresa.razao_social }})</span>{% endif %}</li>{% endfor %}
       {% if meus_alertas_hoje|length > 5 %}<li>… e mais {{ meus_alertas_hoje|length - 5 }}</li>{% endif %}
     </ul>
   </div>
@@ -123,6 +123,36 @@
   });
 })();
 </script>
+{% if meus_alertas_mais_tarde %}
+<div class="toast-container position-fixed bottom-0 end-0 p-3" id="alertas-na-hora" style="z-index: 1090"></div>
+<script>
+  // Alertas com horário mais tarde hoje: aparecem na hora certa sem recarregar a página
+  // (assim nada do que está sendo digitado se perde).
+  (function () {
+    var alertas = {{ meus_alertas_mais_tarde | tojson }};
+    var caixa = document.getElementById('alertas-na-hora');
+    alertas.forEach(function (a) {
+      if (a.ms > 2147483000) return;
+      setTimeout(function () {
+        var t = document.createElement('div');
+        t.className = 'toast show border-warning';
+        t.setAttribute('role', 'alert');
+        var cab = document.createElement('div');
+        cab.className = 'toast-header text-bg-warning';
+        cab.innerHTML = '<strong class="me-auto">🔔 Alerta das ' + a.hora + '</strong>' +
+          '<a class="btn btn-sm btn-light py-0 me-2" href="{{ url_for('alertas.lista') }}">Ver</a>' +
+          '<button type="button" class="btn-close" aria-label="Fechar"></button>';
+        cab.querySelector('.btn-close').onclick = function () { t.remove(); };
+        var corpo = document.createElement('div');
+        corpo.className = 'toast-body';
+        corpo.textContent = a.texto + (a.empresa ? ' (' + a.empresa + ')' : '');
+        t.appendChild(cab); t.appendChild(corpo);
+        caixa.appendChild(t);
+      }, Math.max(a.ms, 0));
+    });
+  })();
+</script>
+{% endif %}
 {% block scripts %}{% endblock %}
 </body>
 </html>

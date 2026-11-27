@@ -9,7 +9,7 @@ import os
 import re
 import secrets
 import time
-from datetime import date
+from datetime import date, datetime
 
 from flask import (
     Blueprint, abort, current_app, flash, redirect, render_template, request, url_for,
@@ -268,9 +268,9 @@ def _resumo_empresa(empresa):
     from flask_login import current_user
     from .models import Alerta
     alertas = (Alerta.query.filter_by(usuario_id=current_user.id, empresa_id=empresa.id)
-               .filter(Alerta.concluido_em.is_(None)).order_by(Alerta.data).all())
+               .filter(Alerta.concluido_em.is_(None)).order_by(Alerta.data, Alerta.hora).all())
     return {"ano": ano, "distribuido": distribuido, "quotas_pendentes": quotas, "alertas": alertas,
-            "hoje": date.today()}
+            "hoje": date.today(), "agora": datetime.now()}
 
 
 def _render_form_empresa(empresa):
