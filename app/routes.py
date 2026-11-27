@@ -265,7 +265,12 @@ def _resumo_empresa(empresa):
     quotas = 0
     if empresa.lucro_real:
         quotas = sum(1 for q in lembretes_pendentes() if q.apuracao.empresa_id == empresa.id)
-    return {"ano": ano, "distribuido": distribuido, "quotas_pendentes": quotas}
+    from flask_login import current_user
+    from .models import Alerta
+    alertas = (Alerta.query.filter_by(usuario_id=current_user.id, empresa_id=empresa.id)
+               .filter(Alerta.concluido_em.is_(None)).order_by(Alerta.data).all())
+    return {"ano": ano, "distribuido": distribuido, "quotas_pendentes": quotas, "alertas": alertas,
+            "hoje": date.today()}
 
 
 def _render_form_empresa(empresa):

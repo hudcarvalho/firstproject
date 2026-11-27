@@ -99,6 +99,20 @@ def create_app(config=None):
             app.logger.exception("Falha ao calcular o lembrete de quotas")
             return {}
 
+    @app.context_processor
+    def meus_alertas():
+        """Alertas pessoais vencidos (até hoje) e não concluídos do usuário logado."""
+        from flask_login import current_user
+
+        if not current_user.is_authenticated:
+            return {}
+        from .alertas import pendentes_hoje
+        try:
+            return {"meus_alertas_hoje": pendentes_hoje()}
+        except Exception:  # o alerta nunca derruba a página
+            app.logger.exception("Falha ao ler os alertas do usuário")
+            return {}
+
     # Endereço dos arquivos estáticos com a "impressão digital" do conteúdo (?v=...), para o
     # navegador baixar de novo sempre que o arquivo mudar em vez de usar a cópia em cache.
     versoes = {}
@@ -129,6 +143,9 @@ def create_app(config=None):
 
     from .auditoria import ativar as ativar_historico
     ativar_historico()
+
+    from .alertas import bp as bp_alertas
+    app.register_blueprint(bp_alertas)
 
     from .historico import bp as bp_historico
     app.register_blueprint(bp_historico)

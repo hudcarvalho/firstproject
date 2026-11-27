@@ -487,3 +487,17 @@ class RegistroAlteracao(db.Model):
     empresa_id = db.Column(db.Integer, index=True)
     empresa_nome = db.Column(db.String(200))
     detalhes = db.Column(db.Text)  # uma alteração por linha: "Campo: antes → depois"
+
+
+class Alerta(db.Model):
+    """Alerta pessoal: só quem criou vê; aparece a partir da data escolhida até ser concluído."""
+
+    id = db.Column(db.Integer, primary_key=True)
+    usuario_id = db.Column(db.Integer, db.ForeignKey("usuario.id"), nullable=False, index=True)
+    texto = db.Column(db.String(500), nullable=False)
+    data = db.Column(db.Date, nullable=False)
+    empresa_id = db.Column(db.Integer, db.ForeignKey("empresa.id"))
+    criado_em = db.Column(db.DateTime, nullable=False)
+    concluido_em = db.Column(db.DateTime)
+
+    empresa = db.relationship("Empresa")
