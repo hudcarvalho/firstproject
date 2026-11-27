@@ -50,6 +50,7 @@ class Movimento:
     favorecido: str = ""
     tipo: str = ""
     documento: str = ""
+    aviso: str = ""  # ex.: valor corrigido na leitura por OCR (célula amarela com comentário)
 
 
 @dataclass
@@ -155,6 +156,11 @@ def planilha(ex, wb=None, sufixo=""):
             fmt(ws.cell(r, C["ent"], m.entrada))
             fmt(ws.cell(r, C["sai"], m.saida))
             fmt(ws.cell(r, C["saldo"], f"={L['saldo']}{r - 1}+{L['ent']}{r}-{L['sai']}{r}"))
+            if m.aviso:
+                from openpyxl.comments import Comment
+                celula = ws.cell(r, C["ent"] if m.entrada is not None else C["sai"])
+                celula.fill = PatternFill("solid", fgColor="FFEB9C")
+                celula.comment = Comment(m.aviso, "OCR")
             if m.saldo_banco is not None:
                 fmt(ws.cell(r, C["banco"], m.saldo_banco), fonte=azul)
                 ws.cell(r, C["confere"], f'=IF(ROUND({L["saldo"]}{r}-{L["banco"]}{r},2)=0,"OK","DIVERGE")').font = normal

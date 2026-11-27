@@ -234,6 +234,21 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
         pdf.close()
         raise ErroPDF(f"O PDF tem {total} páginas; o limite é {MAX_PAGINAS}. Divida o arquivo e converta por partes.")
 
+    if modo == "auto" and paginas and all(_precisa_ocr(p) for p in paginas):
+        pdf.close()
+        extratos, nao_reconhecidos, n = extratos_de_fotos([("arquivo.pdf", conteudo)])
+        if extratos and not nao_reconhecidos:
+            from .extrato_planilha import juntar, planilha
+            if info is not None:
+                info["ocr"] = n
+            contas = {}
+            for ex in extratos:
+                contas.setdefault((ex.banco, ex.agencia, ex.conta), []).append(ex)
+            if len(contas) == 1:
+                ex = juntar(extratos)
+                return planilha(ex), total, len(ex.movimentos)
+        pdf = _abrir_pdf(conteudo)
+        paginas = pdf.pages
     if modo == "auto":
         from . import (extrato_bb, extrato_bmp, extrato_bradesco, extrato_c6, extrato_caixa, extrato_itau,
                        extrato_itau_conta, extrato_itau_periodo, extrato_nubank, extrato_safra, extrato_santander)
@@ -315,6 +330,17 @@ def converter(conteudo, modo="auto", aba_por_pagina=False, converter_numeros=Tru
     return saida.getvalue(), total, total_linhas
 
 
+def _todo_escaneado(conteudo):
+    try:
+        pdf = _abrir_pdf(conteudo)
+        try:
+            return bool(pdf.pages) and all(_precisa_ocr(p) for p in pdf.pages)
+        finally:
+            pdf.close()
+    except Exception:
+        return False
+
+
 def _marcar_ocr(ws):
     from openpyxl.styles import Font, PatternFill
     ws.insert_rows(1)
@@ -322,10 +348,74 @@ def _marcar_ocr(ws):
     ws.cell(1, 1).fill = PatternFill("solid", fgColor="FFEB9C")
 
 
+def _imagens_para_extrato(arquivos):
+    """[(nome, bytes)] -> [(nome, PIL.Image)] das fotos e páginas de PDF escaneado (candidatas a
+    extrato bancário lido por OCR), na ordem enviada."""
+    from PIL import Image
+    from .ocr import e_imagem
+    paginas = []
+    for nome, conteudo in arquivos:
+        if e_imagem(conteudo):
+            try:
+                img = Image.open(BytesIO(conteudo))
+                img.load()
+            except Exception:
+                continue
+            paginas.append((nome, img))
+        elif conteudo.startswith(b"%PDF"):
+            try:
+                pdf = _abrir_pdf(conteudo)
+                escaneado = bool(pdf.pages) and all(_precisa_ocr(p) for p in pdf.pages)
+                pdf.close()
+            except Exception:
+                continue
+            if escaneado:
+                import pypdfium2
+                doc = pypdfium2.PdfDocument(conteudo)
+                try:
+                    for i in range(len(doc)):
+                        paginas.append((nome, doc[i].render(scale=200 / 72).to_pil()))
+                finally:
+                    doc.close()
+    return paginas
+
+
+def extratos_de_fotos(arquivos):
+    """Extratos bancários fotografados/escaneados (hoje: Extrato Consolidado Inteligente do Santander).
+    Devolve ([Extrato], nomes dos arquivos com alguma página não reconhecida, nº de páginas lidas)."""
+    from . import extrato_foto_santander, ocr
+    paginas = _imagens_para_extrato(arquivos)
+    if not paginas or not ocr.disponivel():
+        return [], [nome for nome, _ in arquivos], 0
+    if len(paginas) > extrato_foto_santander.MAX_PAGINAS:
+        raise ErroPDF(f"Envie no máximo {extrato_foto_santander.MAX_PAGINAS} fotos/páginas escaneadas de extrato por "
+                      "vez: a leitura por OCR é demorada. Divida e converta por partes.")
+    try:
+        extratos, sobras = extrato_foto_santander.ler_imagens([img for _, img in paginas])
+    except ocr.ErroOCR as e:
+        raise ErroPDF(str(e)) from e
+    nao_reconhecidos = list(dict.fromkeys(paginas[i][0] for i in sobras))
+    # agência e nome nem sempre são lidos em todas as fotos: completa pelos outros meses da mesma conta
+    for ex in extratos:
+        for outro in extratos:
+            if outro.conta == ex.conta:
+                ex.agencia = ex.agencia or outro.agencia
+                ex.empresa = ex.empresa or outro.empresa
+    return extratos, nao_reconhecidos, len(paginas)
+
+
 def converter_imagem(conteudo, converter_numeros=True, info=None):
-    """Foto/imagem (JPG, PNG…) -> (planilha .xlsx em bytes, 1, nº de linhas), lida por OCR."""
+    """Foto/imagem (JPG, PNG…) -> (planilha .xlsx em bytes, 1, nº de linhas), lida por OCR.
+    Foto de extrato reconhecido sai organizada (Resumo e Extrato conferidos com o banco)."""
     from openpyxl import Workbook
     from openpyxl.utils import get_column_letter
+    from .extrato_planilha import juntar, planilha
+    extratos, _, _ = extratos_de_fotos([("imagem", conteudo)])
+    if extratos:
+        if info is not None:
+            info["ocr"] = 1
+        ex = juntar(extratos)
+        return planilha(ex), 1, len(ex.movimentos)
     linhas = _sem_colunas_vazias(_ContadorOCR().linhas(conteudo, None))
     if info is not None:
         info["ocr"] = 1
@@ -495,9 +585,21 @@ def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arqu
 
     if len(arquivos) > MAX_ARQUIVOS:
         raise ErroPDF(f"Envie no máximo {MAX_ARQUIVOS} arquivos de uma vez.")
+    n_arquivos = len(arquivos)
     from .ocr import e_imagem
     contas, genericos = {}, []
     contador = _ContadorOCR()
+    fotos_lidas = 0
+    if modo == "auto":  # fotos/escaneados de extrato: lidos juntos (um mês pode ocupar várias fotos)
+        extratos_foto, nao_reconhecidos, fotos_lidas = extratos_de_fotos(arquivos)
+        if extratos_foto:
+            for ex in extratos_foto:
+                contas.setdefault((ex.banco, ex.agencia, ex.conta), []).append(ex)
+            lidos = {nome for nome, c in arquivos if (e_imagem(c) or c.startswith(b"%PDF"))} - set(nao_reconhecidos)
+            lidos = {nome for nome, c in arquivos if nome in lidos and (e_imagem(c) or _todo_escaneado(c))}
+            arquivos = [(nome, c) for nome, c in arquivos if nome not in lidos]
+        else:
+            fotos_lidas = 0
     for nome, conteudo in arquivos:
         ex = (_extrato_do_arquivo(nome, conteudo)
               if (modo == "auto" and not e_imagem(conteudo)) or e_planilha(conteudo) else None)
@@ -508,11 +610,11 @@ def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arqu
             linhas = _linhas_do_pdf(nome, conteudo, modo, converter_numeros, contador)
             genericos.append((nome + (" (lido por OCR)" if contador.paginas > antes else ""), linhas))
     if info is not None:
-        info["ocr"] = contador.paginas
+        info["ocr"] = contador.paginas + fotos_lidas
 
     extratos = [juntar(lista) for lista in contas.values()]
     if len(extratos) == 1 and not genericos:
-        return planilha(extratos[0]), len(arquivos), len(extratos[0].movimentos)
+        return planilha(extratos[0]), n_arquivos, len(extratos[0].movimentos)
 
     wb = Workbook()
     padrao = wb.active
@@ -577,4 +679,4 @@ def converter_varios(arquivos, modo="auto", converter_numeros=True, aba_por_arqu
         raise ErroPDF("Nenhum texto encontrado nos arquivos.")
     saida = BytesIO()
     wb.save(saida)
-    return saida.getvalue(), len(arquivos), total
+    return saida.getvalue(), n_arquivos, total
