@@ -62,3 +62,13 @@ def test_usuario_comum_nao_ve_historico(client, app):
     c = app.test_client()
     entrar(c, "comum@escritorio.com")
     assert c.get("/historico/").status_code == 404
+
+
+def test_horario_de_brasilia(client, app):
+    import os
+    import time
+    from datetime import datetime, timedelta, timezone
+    assert os.environ.get("TZ") == "America/Sao_Paulo"
+    agora_brasilia = datetime.now(timezone.utc) - timedelta(hours=3)  # Brasília não tem horário de verão
+    assert abs((datetime.now() - agora_brasilia.replace(tzinfo=None)).total_seconds()) < 120
+    assert time.strftime("%z") == "-0300"
