@@ -27,8 +27,9 @@ def test_menu_e_cabecalho(client, empresas):
     assert ">Obrigações</a>" in html
     html = client.get("/obrigacoes/?ano=2026").get_data(as_text=True)
     cab = ["CÓDIGO", "EMPRESA", "CNPJ", "TRIBUTAÇÃO", "RESPONSÁVEL", "DEFIS", "ECD", "ECF", "IBGE", "OBSERVAÇÃO"]
-    assert 'data-ordem="codigo"' in html and 'data-ordem="nome"' in html
-    pos = [html.index(f">{c} <span") if i < 2 else html.index(f">{c}</th>") for i, c in enumerate(cab)]
+    for campo in ("codigo", "nome", "cnpj", "regime", "resp", "defis", "ecd", "ecf", "ibge", "observacao"):
+        assert f'data-ordem="{campo}"' in html  # todas as colunas ordenam
+    pos = [html.index(f">{c} <span") for c in cab]
     assert pos == sorted(pos)
     # ordem por código, só ativas
     assert html.index("CHAVEIRO ITALIA LTDA") < html.index("EXATA CONTABIL")
