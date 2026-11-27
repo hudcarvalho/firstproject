@@ -5,8 +5,8 @@
 <form method="post" enctype="multipart/form-data" class="card" style="max-width: 760px" id="form-pdf-excel"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="card-body">
     <div class="mb-3">
-      <label class="form-label" for="arquivo">Arquivo(s) PDF (ou extrato da Stone em Excel)</label>
-      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf,.xls,.xlsx" multiple required>
+      <label class="form-label" for="arquivo">Arquivo(s) PDF, fotos/imagens (JPG, PNG) ou extrato da Stone em Excel</label>
+      <input class="form-control" type="file" name="arquivo" id="arquivo" accept=".pdf,application/pdf,.xls,.xlsx,.jpg,.jpeg,.png,.tif,.tiff,.bmp,.webp,image/*" multiple required>
       <div class="form-text">Pode escolher <strong>vários arquivos de uma vez</strong> (segure Ctrl ao clicar): sai <strong>uma planilha só</strong>.
         Extratos da mesma conta (ex.: vários meses) viram um extrato único, em ordem de data e conferido de ponta a ponta;
         contas diferentes ficam em abas próprias. Até {{ max_paginas }} páginas por arquivo.
@@ -43,18 +43,28 @@
   </div>
   <div class="card-footer d-flex align-items-center gap-3">
     <button class="btn btn-success" id="botao-converter">Converter e baixar Excel</button>
-    <span class="small text-muted d-none" id="convertendo">Convertendo… arquivos grandes podem levar alguns segundos.</span>
+    <span class="small text-muted d-none" id="convertendo">Convertendo… arquivos grandes ou escaneados podem levar até alguns minutos.</span>
   </div>
 </form>
+{% if ocr %}
+<div class="alert alert-light border small mt-3" style="max-width: 760px">
+  <strong>PDF escaneado e fotos:</strong> páginas sem texto (escaneadas) e imagens JPG/PNG são lidas por
+  <strong>reconhecimento de texto (OCR)</strong>, gratuito e feito no próprio servidor. Leva alguns segundos por página
+  (até {{ max_ocr }} páginas escaneadas por vez). O OCR pode trocar números ou letras: a planilha sai com um aviso
+  amarelo no topo e <strong>os valores devem ser conferidos</strong> com o original. Para melhor resultado: foto de frente,
+  bem iluminada, sem sombra e com o papel ocupando a tela toda; no scanner, 300 dpi.
+</div>
+{% else %}
 <p class="small text-muted mt-3" style="max-width: 760px">Funciona com PDFs que têm texto (gerados por sistemas). PDF escaneado
-  (imagem/foto do papel) não tem texto para ler e precisaria passar por OCR antes.</p>
+  (imagem/foto do papel) não tem texto para ler: o reconhecimento de texto (OCR) não está disponível neste servidor.</p>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
 document.getElementById('form-pdf-excel').addEventListener('submit', () => {
   document.getElementById('convertendo').classList.remove('d-none');
-  setTimeout(() => document.getElementById('convertendo').classList.add('d-none'), 15000);
+  setTimeout(() => document.getElementById('convertendo').classList.add('d-none'), 120000);
 });
 </script>
 {% endblock %}
