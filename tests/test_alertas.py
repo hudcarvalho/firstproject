@@ -52,3 +52,36 @@ def test_validacao(client, app):
     assert "não encontrada" in r.get_data(as_text=True)
     with app.app_context():
         assert Alerta.query.count() == 0
+
+
+def test_alerta_com_horario(client, app):
+    from datetime import datetime, time
+
+    import pytest
+    agora = datetime.now()
+    if agora.time() >= time(23, 58):
+        pytest.skip("perto da meia-noite não há horário 'mais tarde hoje'")
+    hoje = date.today().isoformat()
+    r = client.post("/alertas/", data={"texto": "Ligar para o cliente", "data": hoje, "hora": "23:59"},
+                    follow_redirects=True)
+    assert "às 23:59" in r.get_data(as_text=True)
+    client.post("/alertas/", data={"texto": "Conferir folha", "data": hoje, "hora": "00:00"})
+    with app.app_context():
+        alertas = {a.texto: a for a in Alerta.query}
+        assert alertas["Ligar para o cliente"].hora == time(23, 59)
+        tarde_id = alertas["Ligar para o cliente"].id
+    html = client.get("/empresas").get_data(as_text=True)
+    # o de 00:00 já venceu e aparece no topo; o de 23:59 ainda não, mas a página está programada p/ avisar
+    topo = html.split('id="meus-alertas"')[1].split("</ul>")[0]
+    assert "Conferir folha" in topo and "Ligar para o cliente" not in topo
+    assert 'id="alertas-na-hora"' in html and '"hora": "23:59"' in html
+    # adiar com horário para mais cedo faz aparecer
+    client.post(f"/alertas/{tarde_id}/adiar", data={"data": hoje, "hora": "00:01"})
+    with app.app_context():
+        assert db.session.get(Alerta, tarde_id).hora == time(0, 1)
+    topo = client.get("/empresas").get_data(as_text=True).split('id="meus-alertas"')[1].split("</ul>")[0]
+    assert "Ligar para o cliente" in topo
+    # adiar sem horário apaga o horário
+    client.post(f"/alertas/{tarde_id}/adiar", data={"data": hoje, "hora": ""})
+    with app.app_context():
+        assert db.session.get(Alerta, tarde_id).hora is None

@@ -2,17 +2,19 @@
 {% block title %}Meus alertas{% endblock %}
 {% block content %}
 <h1 class="h3 mb-1">Meus alertas</h1>
-<p class="small text-muted">Só você vê os seus alertas. A partir da data escolhida, ele aparece no topo do sistema até você marcar como concluído.</p>
+<p class="small text-muted">Só você vê os seus alertas. A partir da data (e do horário, se informado) escolhidos, ele aparece no topo do sistema até você marcar como concluído.</p>
 
 <form method="post" class="card mb-4" style="max-width: 900px">
   <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
   <div class="card-header"><strong>Novo alerta</strong></div>
   <div class="card-body row g-2 align-items-end">
-    <div class="col-md-6"><label class="form-label small mb-1" for="texto">Alerta *</label>
+    <div class="col-md-5"><label class="form-label small mb-1" for="texto">Alerta *</label>
       <input class="form-control" name="texto" id="texto" maxlength="500" required placeholder="Ex.: cobrar extrato de outubro" autofocus></div>
     <div class="col-md-2"><label class="form-label small mb-1" for="data">Data *</label>
       <input type="date" class="form-control" name="data" id="data" value="{{ hoje.isoformat() }}" required></div>
-    <div class="col-md-4"><label class="form-label small mb-1" for="empresa">Empresa (opcional)</label>
+    <div class="col-md-2"><label class="form-label small mb-1" for="hora">Horário</label>
+      <input type="time" class="form-control px-1" name="hora" id="hora" title="Opcional: sem horário, o alerta aparece desde o início do dia"></div>
+    <div class="col-md-3"><label class="form-label small mb-1" for="empresa">Empresa (opcional)</label>
       <input class="form-control" name="empresa" id="empresa" list="lista-empresas" autocomplete="off" placeholder="Digite código ou nome"
              value="{{ (empresa_inicial.codigo ~ ' — ' if empresa_inicial.codigo else '') ~ empresa_inicial.razao_social if empresa_inicial else '' }}">
       <datalist id="lista-empresas">{% for e in empresas %}<option value="{{ (e.codigo ~ ' — ') if e.codigo else '' }}{{ e.razao_social }}"></option>{% endfor %}</datalist></div>
@@ -24,11 +26,11 @@
   <div class="card-header"><strong>Em aberto ({{ abertos|length }})</strong></div>
   <div class="table-responsive">
   <table class="table table-sm align-middle mb-0">
-    <thead class="table-light"><tr><th style="width: 110px">Data</th><th>Alerta</th><th>Empresa</th><th class="text-end">Ações</th></tr></thead>
+    <thead class="table-light"><tr><th style="width: 140px">Data</th><th>Alerta</th><th>Empresa</th><th class="text-end">Ações</th></tr></thead>
     <tbody>
     {% for a in abertos %}
-      <tr class="{{ 'table-warning' if a.data <= hoje }}">
-        <td class="text-nowrap">{{ a.data | data_br }}{% if a.data <= hoje %} 🔔{% endif %}</td>
+      <tr class="{{ 'table-warning' if a.momento <= agora }}">
+        <td class="text-nowrap">{{ a.quando_rotulo }}{% if a.momento <= agora %} 🔔{% endif %}</td>
         <td style="white-space: pre-line">{{ a.texto }}</td>
         <td class="small">{% if a.empresa %}<a href="{{ url_for('main.empresa_detalhe', id=a.empresa_id) }}">{{ a.empresa.razao_social }}</a>{% endif %}</td>
         <td class="text-end text-nowrap">
@@ -36,6 +38,7 @@
             <button class="btn btn-sm btn-success">✓ Concluir</button></form>
           <form method="post" action="{{ url_for('alertas.adiar', id=a.id) }}" class="d-inline-flex gap-1 align-items-center ms-1"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <input type="date" class="form-control form-control-sm" name="data" value="{{ a.data.isoformat() }}" style="width: 140px" aria-label="Nova data">
+            <input type="time" class="form-control form-control-sm px-1" name="hora" value="{{ a.hora.strftime('%H:%M') if a.hora else '' }}" style="width: 115px" aria-label="Novo horário (opcional)">
             <button class="btn btn-sm btn-outline-secondary">Adiar</button></form>
           <form method="post" action="{{ url_for('alertas.excluir', id=a.id) }}" class="d-inline" onsubmit="return confirm('Excluir este alerta?')"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
             <button class="btn btn-sm btn-link text-danger">excluir</button></form>
@@ -56,7 +59,7 @@
   <table class="table table-sm align-middle mb-0">
     <tbody>
     {% for a in concluidos %}
-      <tr class="text-muted"><td class="text-nowrap" style="width: 110px">{{ a.data | data_br }}</td><td>{{ a.texto }}</td>
+      <tr class="text-muted"><td class="text-nowrap" style="width: 140px">{{ a.quando_rotulo }}</td><td>{{ a.texto }}</td>
         <td class="small">{{ a.empresa.razao_social if a.empresa else '' }}</td>
         <td class="small text-nowrap">concluído em {{ a.concluido_em.strftime('%d/%m/%Y') }}</td>
         <td class="text-end"><form method="post" action="{{ url_for('alertas.reabrir', id=a.id) }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
