@@ -25,8 +25,10 @@
     <tr class="titulos">
       {% for c in colunas %}
       {% if loop.index == 1 %}<th class="ordenavel ordem-ativa" data-ordem="codigo" title="Clique para ordenar por código (menor/maior)">{{ c }} <span class="seta">▲</span></th>
-      {% elif loop.index == 2 %}<th class="ordenavel" data-ordem="nome" title="Clique para ordenar por empresa (A–Z / Z–A)">{{ c }} <span class="seta"></span></th>
-      {% else %}<th class="{{ 'text-center' if loop.index in (6, 7, 8, 9) }}">{{ c }}</th>{% endif %}
+      {% elif loop.index == 2 %}<th class="ordenavel" data-ordem="nome" title="Clique para ordenar por empresa (A–Z / Z–A)">{{ c }} <span class="seta">⇅</span></th>
+      {% else %}{% set campo = ['cnpj', 'regime', 'resp', 'defis', 'ecd', 'ecf', 'ibge', 'observacao'][loop.index - 3] %}
+      <th class="ordenavel {{ 'text-center' if loop.index in (6, 7, 8, 9) }}" data-ordem="{{ campo }}"
+          title="Clique para ordenar por {{ c|lower }}{{ ' (data mais antiga/mais recente)' if loop.index in (6, 7, 8, 9) else ' (A–Z / Z–A)' }}">{{ c }} <span class="seta">⇅</span></th>{% endif %}
       {% endfor %}
     </tr>
     <tr class="filtros">
@@ -122,13 +124,21 @@
   });
   filtrar();
 
-  // ordenação: clique em CÓDIGO ou EMPRESA (de novo inverte)
+  // ordenação: clique no título de qualquer coluna (de novo inverte); em branco fica sempre no fim
   const corpo = tabela.tBodies[0];
   const cabecalhos = [...tabela.querySelectorAll('th.ordenavel')];
+  const texto = t => { t = (t || '').trim(); return t && t !== '—' ? [0, 0, t.toLowerCase()] : [2, 0, '']; };
+  const celula = (tr, campo) => tr.querySelector(`input[data-campo="${campo}"]`);
+  const data = v => { const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(v || ''); return m ? [0, Number(m[3] + m[2] + m[1]), ''] : [2, 0, '']; };
   const chave = {
     codigo: tr => { const c = tr.dataset.codigo; return /^\d+$/.test(c) ? [0, Number(c), ''] : [c ? 1 : 2, 0, c]; },
     nome: tr => [0, 0, tr.dataset.nome],
+    cnpj: tr => [0, 0, tr.dataset.cnpj.replace(/\D/g, '')],
+    regime: tr => texto(tr.cells[3].textContent),
+    resp: tr => texto(tr.cells[4].textContent),
+    observacao: tr => texto(celula(tr, 'observacao').value),
   };
+  for (const c of ['defis', 'ecd', 'ecf', 'ibge']) chave[c] = tr => data(celula(tr, c).value);
   let ordem = {campo: 'codigo', sentido: 1};
   function comparar(a, b) {
     const ka = chave[ordem.campo](a), kb = chave[ordem.campo](b);
@@ -141,7 +151,7 @@
     for (const th of cabecalhos) {
       const ativo = th.dataset.ordem === ordem.campo;
       th.classList.toggle('ordem-ativa', ativo);
-      th.querySelector('.seta').textContent = ativo ? (ordem.sentido > 0 ? '▲' : '▼') : '';
+      th.querySelector('.seta').textContent = ativo ? (ordem.sentido > 0 ? '▲' : '▼') : '⇅';
     }
   }
   for (const th of cabecalhos) {
